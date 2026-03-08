@@ -50,6 +50,7 @@ Mise à jour régulière (mensuelle) des financements via les sources du documen
 - [x] Scraping automatique mensuel (APScheduler, 1er du mois)
 - [x] Scraping manuel depuis l'interface admin
 - [ ] Notifications en cas de changements détectés
+- [ ] Versionnement des changements de programme
 
 ---
 
