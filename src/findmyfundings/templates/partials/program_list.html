@@ -1,0 +1,12 @@
+<div class="space-y-4">
+    <p class="text-sm text-gray-500 mb-4">{{ programs|length }} résultat{{ 's' if programs|length > 1 else '' }}</p>
+
+    {% for program in programs %}
+    {% include "partials/program_card.html" %}
+    {% else %}
+    <div class="text-center py-12 text-gray-400">
+        <p class="text-lg">Aucun programme trouvé</p>
+        <p class="text-sm mt-1">Essayez d'ajuster vos filtres</p>
+    </div>
+    {% endfor %}
+</div>

@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block title %}{{ program.name }} - FindMyFundings{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+    <a href="/" class="text-indigo-600 hover:text-indigo-800 text-sm">&larr; Retour à la recherche</a>
+</div>
+
+<div class="bg-white rounded-xl shadow-sm border p-8">
+    <div class="mb-6">
+        <span class="inline-block text-xs font-medium px-2.5 py-0.5 rounded-full mb-3
+            {% if 'européen' in program.category.lower() %}bg-blue-100 text-blue-700
+            {% elif 'publique' in program.category.lower() %}bg-green-100 text-green-700
+            {% elif 'BPI' in program.category %}bg-orange-100 text-orange-700
+            {% elif 'crowdfunding' in program.category.lower() %}bg-purple-100 text-purple-700
+            {% elif 'écénat' in program.category.lower() %}bg-pink-100 text-pink-700
+            {% elif 'Social' in program.category %}bg-yellow-100 text-yellow-700
+            {% else %}bg-gray-100 text-gray-700{% endif %}">
+            {{ program.category }}
+        </span>
+        <h1 class="text-2xl font-bold text-gray-800">{{ program.name }}</h1>
+    </div>
+
+    <!-- Structured info bar -->
+    {% if program.min_amount_eur or program.max_amount_eur or program.cofinancing_pct or program.next_deadline %}
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8 p-4 bg-indigo-50 rounded-lg">
+        {% if program.min_amount_eur or program.max_amount_eur %}
+        <div>
+            <p class="text-xs text-gray-500 uppercase tracking-wide">Montant</p>
+            <p class="font-semibold text-indigo-700">
+                {% if program.min_amount_eur and program.max_amount_eur %}
+                    {{ "{:,.0f}".format(program.min_amount_eur).replace(",", " ") }} - {{ "{:,.0f}".format(program.max_amount_eur).replace(",", " ") }} EUR
+                {% elif program.max_amount_eur %}
+                    Jusqu'à {{ "{:,.0f}".format(program.max_amount_eur).replace(",", " ") }} EUR
+                {% else %}
+                    À partir de {{ "{:,.0f}".format(program.min_amount_eur).replace(",", " ") }} EUR
+                {% endif %}
+            </p>
+        </div>
+        {% endif %}
+        {% if program.cofinancing_pct %}
+        <div>
+            <p class="text-xs text-gray-500 uppercase tracking-wide">Co-financement</p>
+            <p class="font-semibold text-indigo-700">{{ program.cofinancing_pct }}%</p>
+        </div>
+        {% endif %}
+        {% if program.next_deadline %}
+        <div>
+            <p class="text-xs text-gray-500 uppercase tracking-wide">Prochaine échéance</p>
+            <p class="font-semibold text-red-600">{{ program.next_deadline }}</p>
+        </div>
+        {% endif %}
+        {% if program.application_type %}
+        <div>
+            <p class="text-xs text-gray-500 uppercase tracking-wide">Type</p>
+            <p class="font-semibold text-indigo-700">
+                {% if program.application_type == 'appel_a_projets' %}Appel à projets
+                {% elif program.application_type == 'fil_de_leau' %}Fil de l'eau
+                {% elif program.application_type == 'permanent' %}Permanent
+                {% else %}{{ program.application_type }}{% endif %}
+            </p>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Detail sections -->
+    <div class="space-y-6">
+        {% if program.project_types %}
+        <div>
+            <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">Types de projets et fonds disponibles</h2>
+            <div class="text-gray-700 whitespace-pre-line">{{ program.project_types }}</div>
+        </div>
+        {% endif %}
+
+        {% if program.selection_criteria %}
+        <div>
+            <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">Critères de sélection</h2>
+            <div class="text-gray-700 whitespace-pre-line">{{ program.selection_criteria }}</div>
+        </div>
+        {% endif %}
+
+        {% if program.submission_dates %}
+        <div>
+            <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">Dates de soumission</h2>
+            <div class="text-gray-700 whitespace-pre-line">{{ program.submission_dates }}</div>
+        </div>
+        {% endif %}
+
+        {% if program.pdp_axes %}
+        <div>
+            <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">Axes finançables</h2>
+            <div class="text-gray-700 whitespace-pre-line">{{ program.pdp_axes }}</div>
+        </div>
+        {% endif %}
+
+        {% if program.comments %}
+        <div>
+            <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">Commentaires</h2>
+            <div class="text-gray-700 whitespace-pre-line">{{ program.comments }}</div>
+        </div>
+        {% endif %}
+
+        {% if program.eligible_structures %}
+        <div>
+            <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">Structures éligibles</h2>
+            <div class="flex flex-wrap gap-2">
+                {% for s in program.eligible_structures %}
+                <span class="bg-green-100 text-green-700 text-xs px-2 py-1 rounded-full">{{ s }}</span>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        {% if program.eligible_themes %}
+        <div>
+            <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">Thèmes éligibles</h2>
+            <div class="flex flex-wrap gap-2">
+                {% for t in program.eligible_themes %}
+                <span class="bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded-full">{{ t }}</span>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        {% if program.source_urls %}
+        <div>
+            <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">Liens</h2>
+            <div class="space-y-1">
+                {% for link in program.source_urls %}
+                <a href="{{ link.url }}" target="_blank" rel="noopener"
+                   class="block text-indigo-600 hover:text-indigo-800 text-sm truncate">
+                    {{ link.label or link.url }}
+                    <span class="text-gray-400 text-xs ml-1">&nearr;</span>
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,25 @@
+[project]
+name = "findmyfundings"
+version = "0.1.0"
+description = "Application pour aider les structures (associations, ONG, etc.) à trouver des financements"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.34",
+    "jinja2>=3.1",
+    "aiosqlite>=0.20",
+    "openpyxl>=3.1",
+    "httpx>=0.28",
+    "beautifulsoup4>=4.12",
+    "anthropic>=0.52",
+    "apscheduler>=3.10",
+    "pydantic-settings>=2.6",
+    "python-multipart>=0.0.18",
+]
+
+[project.scripts]
+import-excel = "scripts.import_excel:main"
+run-scrape = "scripts.run_scrape:main"
+
+[tool.uv]
+dev-dependencies = ["pytest>=8", "pytest-asyncio>=0.24"]

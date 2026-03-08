@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}FindMyFundings{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+    <style>
+        .htmx-indicator { display: none; }
+        .htmx-request .htmx-indicator { display: inline-block; }
+        .htmx-request.htmx-indicator { display: inline-block; }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <nav class="bg-indigo-700 text-white shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+            <a href="/" class="text-xl font-bold tracking-tight">FindMyFundings</a>
+            <div class="flex gap-6 text-sm">
+                <a href="/" class="hover:text-indigo-200 transition">Recherche</a>
+                <a href="/admin" class="hover:text-indigo-200 transition">Administration</a>
+                <a href="/api/programs" class="hover:text-indigo-200 transition">API</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-7xl mx-auto px-4 py-8">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="border-t mt-12 py-6 text-center text-gray-500 text-sm">
+        FindMyFundings &mdash; Cartographie des financements pour les structures
+    </footer>
+</body>
+</html>
