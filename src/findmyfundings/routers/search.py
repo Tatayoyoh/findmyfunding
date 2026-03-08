@@ -28,14 +28,16 @@ async def search(
     request: Request,
     q: str = "",
     category: list[str] = Query(default=[]),
-    min_amount: int | None = None,
-    max_amount: int | None = None,
+    min_amount: str = "",
+    max_amount: str = "",
 ):
+    min_val = int(min_amount) if min_amount.strip() else None
+    max_val = int(max_amount) if max_amount.strip() else None
     programs = await search_service.search(
         query=q,
         categories=category if category else None,
-        min_amount=min_amount,
-        max_amount=max_amount,
+        min_amount=min_val,
+        max_amount=max_val,
     )
     return request.app.state.templates.TemplateResponse(
         "partials/program_list.html",

@@ -34,13 +34,13 @@ async def search(
 
         if min_amount is not None:
             conditions.append(
-                "(fp.max_amount_eur IS NULL OR fp.max_amount_eur >= ?)"
+                "fp.max_amount_eur IS NOT NULL AND fp.max_amount_eur >= ?"
             )
             params.append(min_amount)
 
         if max_amount is not None:
             conditions.append(
-                "(fp.min_amount_eur IS NULL OR fp.min_amount_eur <= ?)"
+                "fp.min_amount_eur IS NOT NULL AND fp.min_amount_eur <= ?"
             )
             params.append(max_amount)
 

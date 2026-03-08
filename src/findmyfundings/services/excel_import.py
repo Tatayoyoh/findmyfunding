@@ -5,11 +5,47 @@ Extracts hyperlinks from column I.
 """
 
 import json
+import re
 
 import openpyxl
 from openpyxl.cell.cell import MergedCell
 
 from findmyfundings.database import get_db
+
+_AMOUNT_RE = re.compile(
+    r'(\d[\d\s.,]*)\s*(k€|K€|k ?euros?|K ?euros?|M€|M ?euros?|€|euros?)',
+    re.IGNORECASE,
+)
+
+
+def _parse_euro_amount(number_str: str, unit: str) -> int | None:
+    """Convert a matched amount string to euros."""
+    try:
+        cleaned = number_str.strip().replace(" ", "").replace(",", ".")
+        value = float(cleaned)
+        unit_lower = unit.lower().replace(" ", "")
+        if unit_lower.startswith("m"):
+            return int(value * 1_000_000)
+        if unit_lower.startswith("k"):
+            return int(value * 1_000)
+        return int(value)
+    except (ValueError, OverflowError):
+        return None
+
+
+def _extract_amounts(text: str) -> tuple[int | None, int | None]:
+    """Extract min and max euro amounts from free text."""
+    matches = _AMOUNT_RE.findall(text)
+    if not matches:
+        return None, None
+    amounts = []
+    for num_str, unit in matches:
+        val = _parse_euro_amount(num_str, unit)
+        if val and val > 0:
+            amounts.append(val)
+    if not amounts:
+        return None, None
+    return min(amounts), max(amounts)
 
 
 def _get_merged_value(ws, cell):
@@ -120,15 +156,22 @@ def parse_excel(file_path: str) -> list[dict]:
 
             all_links.extend(_collect_hyperlinks(ws, r))
 
+        project_types_text = "\n".join(project_types_parts)
+        criteria_text = "\n".join(criteria_parts)
+        amount_text = project_types_text + " " + criteria_text
+        min_amount, max_amount = _extract_amounts(amount_text)
+
         programs.append({
             "category": current_category,
             "name": name,
-            "project_types": "\n".join(project_types_parts),
-            "selection_criteria": "\n".join(criteria_parts),
+            "project_types": project_types_text,
+            "selection_criteria": criteria_text,
             "submission_dates": "\n".join(dates_parts),
             "pdp_axes": "\n".join(axes_parts),
             "comments": "\n".join(comments_parts),
             "source_urls": all_links,
+            "min_amount_eur": min_amount,
+            "max_amount_eur": max_amount,
         })
 
         row = end_row + 1
@@ -150,8 +193,9 @@ async def import_to_db(programs: list[dict]):
             cursor = await db.execute(
                 """INSERT INTO funding_programs
                    (category, name, project_types, selection_criteria,
-                    submission_dates, pdp_axes, comments, source_urls)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    submission_dates, pdp_axes, comments, source_urls,
+                    min_amount_eur, max_amount_eur)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     prog["category"],
                     prog["name"],
@@ -161,6 +205,8 @@ async def import_to_db(programs: list[dict]):
                     prog["pdp_axes"],
                     prog["comments"],
                     source_urls_json,
+                    prog.get("min_amount_eur"),
+                    prog.get("max_amount_eur"),
                 ),
             )
             program_id = cursor.lastrowid
