@@ -10,9 +10,6 @@ build/
 # Virtual environment
 .venv/
 
-# uv
-uv.lock
-
 # Environment variables
 .env
 
