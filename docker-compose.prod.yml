@@ -1,0 +1,24 @@
+services:
+  findmyfundings:
+    build: .
+    container_name: findmyfundings
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - db-data:/app/data
+    networks:
+      - traefik-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik-network"
+      - "traefik.http.routers.findmyfundings.rule=Host(`${TRAEFIK_DOMAIN}`)"
+      - "traefik.http.routers.findmyfundings.tls=${TRAEFIK_TLS}"
+      - "traefik.http.routers.findmyfundings.entrypoints=${TRAEFIK_ENTRYPOINTS}"
+      - "traefik.http.services.findmyfundings.loadbalancer.server.port=8000"
+
+volumes:
+  db-data:
+
+networks:
+  traefik-network:
+    external: true
