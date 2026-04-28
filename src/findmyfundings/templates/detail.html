@@ -22,7 +22,7 @@
     </div>
 
     <!-- Structured info bar -->
-    {% if program.min_amount_eur or program.max_amount_eur or program.cofinancing_pct or program.next_deadline %}
+    {% if program.min_amount_eur or program.max_amount_eur or program.cofinancing_pct or program.next_deadline or program.permanent or program.start_submission_date %}
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8 p-4 bg-indigo-50 rounded-lg">
         {% if program.min_amount_eur or program.max_amount_eur %}
         <div>
@@ -42,6 +42,25 @@
         <div>
             <p class="text-xs text-gray-500 uppercase tracking-wide">Co-financement</p>
             <p class="font-semibold text-indigo-700">{{ program.cofinancing_pct }}%</p>
+        </div>
+        {% endif %}
+        {% if program.permanent %}
+        <div>
+            <p class="text-xs text-gray-500 uppercase tracking-wide">Soumission</p>
+            <p class="font-semibold text-green-600">Permanent</p>
+        </div>
+        {% elif program.start_submission_date or program.end_submission_date %}
+        <div>
+            <p class="text-xs text-gray-500 uppercase tracking-wide">Période de soumission</p>
+            <p class="font-semibold text-indigo-700">
+                {% if program.start_submission_date and program.end_submission_date %}
+                    {{ program.start_submission_date }} &rarr; {{ program.end_submission_date }}
+                {% elif program.end_submission_date %}
+                    Jusqu'au {{ program.end_submission_date }}
+                {% else %}
+                    À partir du {{ program.start_submission_date }}
+                {% endif %}
+            </p>
         </div>
         {% endif %}
         {% if program.next_deadline %}
@@ -77,13 +96,6 @@
         <div>
             <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">Critères de sélection</h2>
             <div class="text-gray-700 whitespace-pre-line">{{ program.selection_criteria }}</div>
-        </div>
-        {% endif %}
-
-        {% if program.submission_dates %}
-        <div>
-            <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">Dates de soumission</h2>
-            <div class="text-gray-700 whitespace-pre-line">{{ program.submission_dates }}</div>
         </div>
         {% endif %}
 

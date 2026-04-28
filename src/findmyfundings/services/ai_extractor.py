@@ -19,6 +19,9 @@ EXTRACTION_PROMPT = """Tu es un assistant spécialisé dans l'analyse de program
 - eligible_themes: liste de thèmes/domaines éligibles (ex: ["environnement", "social", "énergie"])
 - application_type: type de candidature - "appel_a_projets" | "fil_de_leau" | "permanent" | null
 - next_deadline: prochaine date limite connue au format "YYYY-MM-DD" ou null
+- permanent: true si le dépôt est permanent/fil de l'eau/sans date limite, false sinon
+- start_submission_date: date de début de soumission au format "YYYY-MM-DD" ou null
+- end_submission_date: date de fin de soumission au format "YYYY-MM-DD" ou null
 - summary: résumé en 2-3 phrases du programme de financement
 
 Réponds UNIQUEMENT avec le JSON, sans explication.
@@ -73,6 +76,9 @@ async def update_program_with_extraction(
                 eligible_themes = ?,
                 application_type = ?,
                 next_deadline = ?,
+                permanent = ?,
+                start_submission_date = ?,
+                end_submission_date = ?,
                 last_scraped_at = CURRENT_TIMESTAMP,
                 last_updated_at = CURRENT_TIMESTAMP
             WHERE id = ?""",
@@ -84,6 +90,9 @@ async def update_program_with_extraction(
                 json.dumps(extraction.eligible_themes, ensure_ascii=False),
                 extraction.application_type,
                 str(extraction.next_deadline) if extraction.next_deadline else None,
+                extraction.permanent,
+                str(extraction.start_submission_date) if extraction.start_submission_date else None,
+                str(extraction.end_submission_date) if extraction.end_submission_date else None,
                 program_id,
             ),
         )

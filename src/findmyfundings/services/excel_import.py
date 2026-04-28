@@ -7,9 +7,11 @@ Extracts hyperlinks from column I.
 import json
 import re
 
+import anthropic
 import openpyxl
 from openpyxl.cell.cell import MergedCell
 
+from findmyfundings.config import settings
 from findmyfundings.database import get_db
 
 _AMOUNT_RE = re.compile(
@@ -179,6 +181,76 @@ def parse_excel(file_path: str) -> list[dict]:
     return programs
 
 
+_DATE_EXTRACTION_PROMPT = """Analyse ce texte décrivant les dates de soumission d'un programme de financement.
+
+Réponds UNIQUEMENT avec un JSON contenant :
+- permanent: true si le dépôt est permanent, au fil de l'eau, sans date limite, ou "n'importe quand". false sinon.
+- start_submission_date: date de début de soumission au format "YYYY-MM-DD", ou null si inconnue.
+- end_submission_date: date de fin de soumission au format "YYYY-MM-DD", ou null si inconnue.
+
+Si le texte est vide, "N/A", ou ne contient aucune information exploitable, réponds : {{"permanent": true, "start_submission_date": null, "end_submission_date": null}}
+
+Texte : {text}"""
+
+
+def _extract_submission_dates_ai(texts: list[dict]) -> list[dict]:
+    """Use Claude to batch-extract structured dates from submission_dates text.
+
+    Args:
+        texts: list of {"id": int, "text": str}
+
+    Returns:
+        list of {"id": int, "permanent": bool, "start": str|None, "end": str|None}
+    """
+    if not settings.anthropic_api_key or not texts:
+        return []
+
+    prompt_parts = []
+    for item in texts:
+        prompt_parts.append(f"[ID={item['id']}] {item['text']}")
+
+    batch_prompt = """Analyse ces textes décrivant les dates de soumission de programmes de financement.
+
+Pour CHAQUE entrée [ID=N], réponds avec un objet JSON.
+Réponds avec un tableau JSON contenant tous les résultats.
+
+Chaque objet doit contenir :
+- id: le numéro ID
+- permanent: true si dépôt permanent/fil de l'eau/sans date limite/"n'importe quand"/N/A/vide. false sinon.
+- start_submission_date: date début au format "YYYY-MM-DD" ou null
+- end_submission_date: date fin au format "YYYY-MM-DD" ou null
+
+Réponds UNIQUEMENT avec le JSON, sans explication.
+
+Textes :
+""" + "\n".join(prompt_parts)
+
+    try:
+        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+        message = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=2048,
+            messages=[{"role": "user", "content": batch_prompt}],
+        )
+        response_text = message.content[0].text.strip()
+        if response_text.startswith("```"):
+            response_text = response_text.split("\n", 1)[1]
+            response_text = response_text.rsplit("```", 1)[0]
+
+        results = json.loads(response_text)
+        return [
+            {
+                "id": r["id"],
+                "permanent": r.get("permanent", False),
+                "start": r.get("start_submission_date"),
+                "end": r.get("end_submission_date"),
+            }
+            for r in results
+        ]
+    except Exception:
+        return []
+
+
 async def import_to_db(programs: list[dict]):
     """Insert parsed programs into the database."""
     db = await get_db()
@@ -188,20 +260,21 @@ async def import_to_db(programs: list[dict]):
         await db.execute("DELETE FROM funding_programs")
         await db.execute("DELETE FROM funding_fts")
 
-        for prog in programs:
+        # First pass: insert all programs
+        id_map = {}  # index → program_id
+        for i, prog in enumerate(programs):
             source_urls_json = json.dumps(prog["source_urls"], ensure_ascii=False)
             cursor = await db.execute(
                 """INSERT INTO funding_programs
                    (category, name, project_types, selection_criteria,
-                    submission_dates, pdp_axes, comments, source_urls,
+                    pdp_axes, comments, source_urls,
                     min_amount_eur, max_amount_eur)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     prog["category"],
                     prog["name"],
                     prog["project_types"],
                     prog["selection_criteria"],
-                    prog["submission_dates"],
                     prog["pdp_axes"],
                     prog["comments"],
                     source_urls_json,
@@ -210,6 +283,7 @@ async def import_to_db(programs: list[dict]):
                 ),
             )
             program_id = cursor.lastrowid
+            id_map[i] = program_id
 
             # Register source URLs for monitoring
             for link in prog["source_urls"]:
@@ -223,6 +297,40 @@ async def import_to_db(programs: list[dict]):
                         )
                     except Exception:
                         pass  # Skip duplicate URLs
+
+        await db.commit()
+
+        # Second pass: extract submission dates via AI
+        texts_to_extract = []
+        for i, prog in enumerate(programs):
+            raw = prog.get("submission_dates", "").strip()
+            if raw:
+                texts_to_extract.append({"id": id_map[i], "text": raw})
+
+        if texts_to_extract:
+            ai_ids = set()
+            results = _extract_submission_dates_ai(texts_to_extract)
+            for r in results:
+                ai_ids.add(r["id"])
+                await db.execute(
+                    """UPDATE funding_programs
+                       SET permanent=?, start_submission_date=?, end_submission_date=?
+                       WHERE id=?""",
+                    (r["permanent"], r.get("start"), r.get("end"), r["id"]),
+                )
+
+        # Programs with no submission_dates text → mark as permanent
+        # (empty cell in Excel means no specific deadline)
+        no_text_ids = [
+            id_map[i] for i, prog in enumerate(programs)
+            if not prog.get("submission_dates", "").strip()
+        ]
+        if no_text_ids:
+            placeholders = ",".join("?" * len(no_text_ids))
+            await db.execute(
+                f"UPDATE funding_programs SET permanent = 1 WHERE id IN ({placeholders})",
+                no_text_ids,
+            )
 
         await db.commit()
         return len(programs)

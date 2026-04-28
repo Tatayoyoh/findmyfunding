@@ -1,0 +1,366 @@
+{% extends "base.html" %}
+{% block title %}{{ "Modifier" if program else "Ajouter" }} un programme - FindMyFundings{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+    <a href="/admin/programs" class="text-indigo-600 hover:text-indigo-800 text-sm">&larr; Retour à la liste</a>
+</div>
+
+<div class="bg-white rounded-xl shadow-sm border p-8 max-w-3xl">
+    <h1 class="text-2xl font-bold text-gray-800 mb-6">{{ "Modifier" if program else "Ajouter" }} un programme</h1>
+
+    <form method="POST" class="space-y-6">
+        <!-- Basic info -->
+        <div class="grid md:grid-cols-2 gap-4">
+            <div>
+                <label for="name" class="block text-sm font-medium text-gray-600 mb-1">Nom *</label>
+                <input type="text" name="name" id="name" required
+                    value="{{ program.name if program else '' }}"
+                    class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500" />
+            </div>
+            <div>
+                <label for="category" class="block text-sm font-medium text-gray-600 mb-1">Catégorie *</label>
+                <input type="text" name="category" id="category" required list="categories"
+                    value="{{ program.category if program else '' }}"
+                    class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500" />
+                <datalist id="categories">
+                    {% for cat in categories %}
+                    <option value="{{ cat }}">
+                    {% endfor %}
+                </datalist>
+            </div>
+        </div>
+
+        <!-- Text fields -->
+        <div>
+            <label for="project_types" class="block text-sm font-medium text-gray-600 mb-1">Types de projets et fonds disponibles</label>
+            <textarea name="project_types" id="project_types" rows="3"
+                class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500">{{ program.project_types if program else '' }}</textarea>
+        </div>
+
+        <div>
+            <label for="selection_criteria" class="block text-sm font-medium text-gray-600 mb-1">Critères de sélection</label>
+            <textarea name="selection_criteria" id="selection_criteria" rows="3"
+                class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500">{{ program.selection_criteria if program else '' }}</textarea>
+        </div>
+
+        <div class="grid md:grid-cols-3 gap-4 items-end">
+            <div>
+                <label for="start_submission_date" class="block text-sm font-medium text-gray-600 mb-1">Début soumission</label>
+                <input type="date" name="start_submission_date" id="start_submission_date"
+                    value="{{ program.start_submission_date if program and program.start_submission_date else '' }}"
+                    class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500" />
+            </div>
+            <div>
+                <label for="end_submission_date" class="block text-sm font-medium text-gray-600 mb-1">Fin soumission</label>
+                <input type="date" name="end_submission_date" id="end_submission_date"
+                    value="{{ program.end_submission_date if program and program.end_submission_date else '' }}"
+                    class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500" />
+            </div>
+            <div class="flex items-center gap-2 pb-1">
+                <input type="checkbox" name="permanent" id="permanent" value="1"
+                    {{ 'checked' if program and program.permanent }}
+                    class="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+                <label for="permanent" class="text-sm font-medium text-gray-600">Permanent (pas de date limite)</label>
+            </div>
+        </div>
+
+        <div>
+            <label for="pdp_axes" class="block text-sm font-medium text-gray-600 mb-1">Axes finançables</label>
+            <textarea name="pdp_axes" id="pdp_axes" rows="2"
+                class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500">{{ program.pdp_axes if program else '' }}</textarea>
+        </div>
+
+        <div>
+            <label for="comments" class="block text-sm font-medium text-gray-600 mb-1">Commentaires</label>
+            <textarea name="comments" id="comments" rows="2"
+                class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500">{{ program.comments if program else '' }}</textarea>
+        </div>
+
+        <!-- Structured fields -->
+        <h2 class="text-lg font-semibold text-gray-700 pt-2">Informations structurées</h2>
+
+        <div class="grid md:grid-cols-3 gap-4">
+            <div>
+                <label for="min_amount_eur" class="block text-sm font-medium text-gray-600 mb-1">Montant min (EUR)</label>
+                <input type="number" name="min_amount_eur" id="min_amount_eur"
+                    value="{{ program.min_amount_eur if program and program.min_amount_eur else '' }}"
+                    class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500" />
+            </div>
+            <div>
+                <label for="max_amount_eur" class="block text-sm font-medium text-gray-600 mb-1">Montant max (EUR)</label>
+                <input type="number" name="max_amount_eur" id="max_amount_eur"
+                    value="{{ program.max_amount_eur if program and program.max_amount_eur else '' }}"
+                    class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500" />
+            </div>
+            <div>
+                <label for="cofinancing_pct" class="block text-sm font-medium text-gray-600 mb-1">Co-financement (%)</label>
+                <input type="number" name="cofinancing_pct" id="cofinancing_pct" min="0" max="100"
+                    value="{{ program.cofinancing_pct if program and program.cofinancing_pct else '' }}"
+                    class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500" />
+            </div>
+        </div>
+
+        <div class="grid md:grid-cols-2 gap-4">
+            <div>
+                <label for="application_type" class="block text-sm font-medium text-gray-600 mb-1">Type de candidature</label>
+                <select name="application_type" id="application_type"
+                    class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500">
+                    <option value="">—</option>
+                    <option value="appel_a_projets" {{ 'selected' if program and program.application_type == 'appel_a_projets' }}>Appel à projets</option>
+                    <option value="fil_de_leau" {{ 'selected' if program and program.application_type == 'fil_de_leau' }}>Fil de l'eau</option>
+                    <option value="permanent" {{ 'selected' if program and program.application_type == 'permanent' }}>Permanent</option>
+                </select>
+            </div>
+            <div>
+                <label for="next_deadline" class="block text-sm font-medium text-gray-600 mb-1">Prochaine échéance</label>
+                <input type="date" name="next_deadline" id="next_deadline"
+                    value="{{ program.next_deadline if program and program.next_deadline else '' }}"
+                    class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500" />
+            </div>
+        </div>
+
+        <div>
+            <label class="block text-sm font-medium text-gray-600 mb-1">Structures éligibles</label>
+            <div class="tag-input-wrap" data-name="eligible_structures"
+                 data-suggestions='{{ suggestions.structures | tojson }}'
+                 data-initial='{{ program.eligible_structures | tojson if program and program.eligible_structures else "[]" }}'
+                 data-placeholder="Ajouter une structure...">
+            </div>
+        </div>
+
+        <div>
+            <label class="block text-sm font-medium text-gray-600 mb-1">Thèmes éligibles</label>
+            <div class="tag-input-wrap" data-name="eligible_themes"
+                 data-suggestions='{{ suggestions.themes | tojson }}'
+                 data-initial='{{ program.eligible_themes | tojson if program and program.eligible_themes else "[]" }}'
+                 data-placeholder="Ajouter un thème...">
+            </div>
+        </div>
+
+        <div>
+            <label for="source_urls" class="block text-sm font-medium text-gray-600 mb-1">URLs sources <span class="text-gray-400 font-normal">(une par ligne)</span></label>
+            <textarea name="source_urls" id="source_urls" rows="2"
+                placeholder="https://example.com/financement"
+                class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500">{% if program and program.source_urls %}{% for link in program.source_urls %}{{ link.url }}{% if not loop.last %}
+{% endif %}{% endfor %}{% endif %}</textarea>
+        </div>
+
+        <div class="flex gap-3 pt-2">
+            <button type="submit"
+                class="bg-indigo-600 text-white px-6 py-2 rounded-lg text-sm hover:bg-indigo-700 transition">
+                {{ "Enregistrer" if program else "Créer le programme" }}
+            </button>
+            <a href="/admin/programs"
+                class="px-6 py-2 rounded-lg text-sm border text-gray-600 hover:bg-gray-50 transition">
+                Annuler
+            </a>
+        </div>
+    </form>
+</div>
+
+<style>
+    .tag-input {
+        display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+        border: 1px solid #d1d5db; border-radius: 0.5rem; padding: 6px 10px;
+        min-height: 38px; cursor: text; background: white;
+        transition: box-shadow 0.15s;
+    }
+    .tag-input:focus-within {
+        box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.5);
+        border-color: #6366f1;
+    }
+    .tag-chip {
+        display: inline-flex; align-items: center; gap: 4px;
+        background: #e0e7ff; color: #3730a3; font-size: 0.8rem;
+        padding: 2px 8px; border-radius: 9999px; white-space: nowrap;
+    }
+    .tag-chip button {
+        background: none; border: none; cursor: pointer;
+        color: #6366f1; font-size: 1rem; line-height: 1;
+        padding: 0 2px; font-weight: bold;
+    }
+    .tag-chip button:hover { color: #dc2626; }
+    .tag-input input {
+        border: none; outline: none; flex: 1; min-width: 120px;
+        font-size: 0.875rem; background: transparent;
+    }
+    .tag-dropdown {
+        position: absolute; z-index: 50; left: 0; right: 0; top: 100%;
+        background: white; border: 1px solid #d1d5db; border-radius: 0.5rem;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1); max-height: 180px;
+        overflow-y: auto; margin-top: 2px;
+    }
+    .tag-dropdown-item {
+        padding: 6px 12px; font-size: 0.875rem; cursor: pointer;
+    }
+    .tag-dropdown-item:hover, .tag-dropdown-item.active {
+        background: #eef2ff; color: #3730a3;
+    }
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.tag-input-wrap').forEach(wrap => {
+        const fieldName = wrap.dataset.name;
+        const suggestions = JSON.parse(wrap.dataset.suggestions || '[]');
+        const initial = JSON.parse(wrap.dataset.initial || '[]');
+        const placeholder = wrap.dataset.placeholder || '';
+        const tags = [];
+
+        // Hidden input for form submission
+        const hidden = document.createElement('input');
+        hidden.type = 'hidden';
+        hidden.name = fieldName;
+        wrap.appendChild(hidden);
+
+        // Container
+        const container = document.createElement('div');
+        container.className = 'tag-input';
+        wrap.appendChild(container);
+
+        // Wrapper for relative positioning of dropdown
+        const posWrap = document.createElement('div');
+        posWrap.style.position = 'relative';
+        posWrap.style.flex = '1';
+        posWrap.style.minWidth = '120px';
+        container.appendChild(posWrap);
+
+        // Visible input
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.placeholder = placeholder;
+        posWrap.appendChild(input);
+
+        // Dropdown
+        const dropdown = document.createElement('div');
+        dropdown.className = 'tag-dropdown';
+        dropdown.style.display = 'none';
+        posWrap.appendChild(dropdown);
+
+        let activeIdx = -1;
+
+        function sync() {
+            hidden.value = tags.join(', ');
+        }
+
+        function renderChips() {
+            container.querySelectorAll('.tag-chip').forEach(c => c.remove());
+            tags.forEach((tag, i) => {
+                const chip = document.createElement('span');
+                chip.className = 'tag-chip';
+                chip.innerHTML = `${tag}<button type="button" data-idx="${i}">&times;</button>`;
+                container.insertBefore(chip, posWrap);
+            });
+            sync();
+        }
+
+        function addTag(value) {
+            const v = value.trim();
+            if (!v || tags.includes(v)) return;
+            tags.push(v);
+            input.value = '';
+            renderChips();
+            hideDropdown();
+        }
+
+        function removeTag(idx) {
+            tags.splice(idx, 1);
+            renderChips();
+        }
+
+        function showDropdown(items) {
+            dropdown.innerHTML = '';
+            activeIdx = -1;
+            if (!items.length) { dropdown.style.display = 'none'; return; }
+            items.forEach((item, i) => {
+                const div = document.createElement('div');
+                div.className = 'tag-dropdown-item';
+                div.textContent = item;
+                div.addEventListener('mousedown', e => {
+                    e.preventDefault();
+                    addTag(item);
+                });
+                dropdown.appendChild(div);
+            });
+            dropdown.style.display = 'block';
+        }
+
+        function hideDropdown() {
+            dropdown.style.display = 'none';
+            activeIdx = -1;
+        }
+
+        function updateActive() {
+            const items = dropdown.querySelectorAll('.tag-dropdown-item');
+            items.forEach((el, i) => el.classList.toggle('active', i === activeIdx));
+            if (activeIdx >= 0 && items[activeIdx]) {
+                items[activeIdx].scrollIntoView({ block: 'nearest' });
+            }
+        }
+
+        function filterSuggestions(query) {
+            const q = query.toLowerCase();
+            return suggestions.filter(s =>
+                !tags.includes(s) && s.toLowerCase().includes(q)
+            );
+        }
+
+        input.addEventListener('input', () => {
+            const q = input.value.trim();
+            if (q.length > 0) {
+                showDropdown(filterSuggestions(q));
+            } else {
+                hideDropdown();
+            }
+        });
+
+        input.addEventListener('focus', () => {
+            const q = input.value.trim();
+            if (q.length > 0) showDropdown(filterSuggestions(q));
+        });
+
+        input.addEventListener('blur', () => {
+            setTimeout(hideDropdown, 150);
+        });
+
+        input.addEventListener('keydown', e => {
+            const items = dropdown.querySelectorAll('.tag-dropdown-item');
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                if (dropdown.style.display === 'none' && input.value.trim()) {
+                    showDropdown(filterSuggestions(input.value.trim()));
+                }
+                activeIdx = Math.min(activeIdx + 1, items.length - 1);
+                updateActive();
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                activeIdx = Math.max(activeIdx - 1, 0);
+                updateActive();
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                if (activeIdx >= 0 && items[activeIdx]) {
+                    addTag(items[activeIdx].textContent);
+                } else if (input.value.trim()) {
+                    addTag(input.value);
+                }
+            } else if (e.key === 'Backspace' && !input.value && tags.length) {
+                removeTag(tags.length - 1);
+            }
+        });
+
+        container.addEventListener('click', e => {
+            if (e.target.closest('button[data-idx]')) {
+                removeTag(parseInt(e.target.closest('button').dataset.idx));
+            } else {
+                input.focus();
+            }
+        });
+
+        // Init with existing values
+        initial.forEach(v => { if (v.trim()) tags.push(v.trim()); });
+        renderChips();
+    });
+});
+</script>
+{% endblock %}

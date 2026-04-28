@@ -20,7 +20,9 @@ def _row_to_program(row) -> FundingProgram:
         name=row["name"],
         project_types=row["project_types"] or "",
         selection_criteria=row["selection_criteria"] or "",
-        submission_dates=row["submission_dates"] or "",
+        permanent=bool(row["permanent"]),
+        start_submission_date=row["start_submission_date"],
+        end_submission_date=row["end_submission_date"],
         pdp_axes=row["pdp_axes"] or "",
         comments=row["comments"] or "",
         source_urls=source_urls,
@@ -71,6 +73,33 @@ async def get_categories() -> list[str]:
         return [row["category"] for row in rows]
     finally:
         await db.close()
+
+
+async def get_all_suggestions() -> dict[str, list[str]]:
+    """Return distinct values for eligible_structures and eligible_themes."""
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            "SELECT eligible_structures, eligible_themes FROM funding_programs"
+        )
+        rows = await cursor.fetchall()
+    finally:
+        await db.close()
+
+    structures: set[str] = set()
+    themes: set[str] = set()
+    for row in rows:
+        for s in json.loads(row["eligible_structures"] or "[]"):
+            if s.strip():
+                structures.add(s.strip())
+        for t in json.loads(row["eligible_themes"] or "[]"):
+            if t.strip():
+                themes.add(t.strip())
+
+    return {
+        "structures": sorted(structures),
+        "themes": sorted(themes),
+    }
 
 
 async def count() -> int:

@@ -9,7 +9,9 @@ CREATE TABLE IF NOT EXISTS funding_programs (
     name TEXT NOT NULL,
     project_types TEXT DEFAULT '',
     selection_criteria TEXT DEFAULT '',
-    submission_dates TEXT DEFAULT '',
+    permanent BOOLEAN DEFAULT 0,
+    start_submission_date DATE,
+    end_submission_date DATE,
     pdp_axes TEXT DEFAULT '',
     comments TEXT DEFAULT '',
     source_urls TEXT DEFAULT '[]',
@@ -90,5 +92,82 @@ async def init_db():
     try:
         await db.executescript(SCHEMA)
         await db.commit()
+
+        # Migrate: submission_dates → permanent + start/end_submission_date
+        cursor = await db.execute(
+            "PRAGMA table_info(funding_programs)"
+        )
+        columns = {row[1] for row in await cursor.fetchall()}
+        if "submission_dates" in columns:
+            await _migrate_submission_dates(db)
     finally:
         await db.close()
+
+
+async def _migrate_submission_dates(db: aiosqlite.Connection):
+    """Migrate submission_dates text to structured date fields."""
+    import re
+
+    # Ensure new columns exist
+    for col, definition in [
+        ("permanent", "BOOLEAN DEFAULT 0"),
+        ("start_submission_date", "DATE"),
+        ("end_submission_date", "DATE"),
+    ]:
+        try:
+            await db.execute(
+                f"ALTER TABLE funding_programs ADD COLUMN {col} {definition}"
+            )
+        except Exception:
+            pass  # Column already exists
+
+    cursor = await db.execute(
+        "SELECT id, submission_dates FROM funding_programs"
+    )
+    rows = await cursor.fetchall()
+
+    date_re = re.compile(r"(\d{2})/(\d{2})/(\d{4})")
+
+    for row in rows:
+        prog_id = row[0]
+        text = (row[1] or "").strip()
+
+        permanent = False
+        start_date = None
+        end_date = None
+
+        lower = text.lower()
+        if (
+            not text
+            or lower == "n/a"
+            or "n'importe quand" in lower
+            or "fil de l'eau" in lower
+            or "dépôt de dossiers en ligne" in lower
+            or "en ligne" in lower
+        ):
+            permanent = True
+        else:
+            dates = date_re.findall(text)
+            if dates:
+                parsed = []
+                for d, m, y in dates:
+                    parsed.append(f"{y}-{m}-{d}")
+                parsed.sort()
+                if len(parsed) >= 2:
+                    start_date = parsed[0]
+                    end_date = parsed[-1]
+                elif len(parsed) == 1:
+                    # Single date → use as end date (deadline)
+                    end_date = parsed[0]
+
+        await db.execute(
+            """UPDATE funding_programs
+               SET permanent=?, start_submission_date=?, end_submission_date=?
+               WHERE id=?""",
+            (permanent, start_date, end_date, prog_id),
+        )
+
+    # Drop old column by rebuilding table (SQLite limitation)
+    # We keep submission_dates for now and just ignore it — dropping requires
+    # recreating the table which is risky. The column is simply unused.
+    await db.commit()

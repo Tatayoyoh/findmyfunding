@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Programmes - Administration - FindMyFundings{% endblock %}
+
+{% block content %}
+<div class="flex items-center justify-between mb-6">
+    <a href="/admin" class="text-sm text-gray-500 hover:text-gray-700">&larr; Administration</a>
+    <h1 class="text-2xl font-bold text-gray-800">Programmes de financement</h1>
+    <div class="flex gap-3">
+        <a href="/admin/programs/new"
+            class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-indigo-700 transition">
+            + Ajouter un programme
+        </a>
+    </div>
+</div>
+
+{% if message %}
+<div class="bg-green-50 border border-green-200 text-green-700 rounded-lg p-4 mb-6">
+    {{ message }}
+</div>
+{% endif %}
+
+{% if programs %}
+<div class="bg-white rounded-xl shadow-sm border overflow-hidden">
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="text-left px-6 py-3 text-gray-500 font-medium">Nom</th>
+                    <th class="text-left px-6 py-3 text-gray-500 font-medium">Catégorie</th>
+                    <th class="text-left px-6 py-3 text-gray-500 font-medium">Montant</th>
+                    <th class="text-left px-6 py-3 text-gray-500 font-medium">Échéance</th>
+                    <th class="px-6 py-3"></th>
+                </tr>
+            </thead>
+            <tbody class="divide-y">
+                {% for p in programs %}
+                <tr class="hover:bg-gray-50">
+                    <td class="px-6 py-3">
+                        <a href="/program/{{ p.id }}" class="text-indigo-600 hover:underline font-medium">{{ p.name }}</a>
+                    </td>
+                    <td class="px-6 py-3 text-gray-600">{{ p.category }}</td>
+                    <td class="px-6 py-3 text-gray-600">
+                        {% if p.min_amount_eur and p.max_amount_eur %}
+                            {{ "{:,.0f}".format(p.min_amount_eur).replace(",", " ") }} - {{ "{:,.0f}".format(p.max_amount_eur).replace(",", " ") }} EUR
+                        {% elif p.max_amount_eur %}
+                            Jusqu'à {{ "{:,.0f}".format(p.max_amount_eur).replace(",", " ") }} EUR
+                        {% elif p.min_amount_eur %}
+                            À partir de {{ "{:,.0f}".format(p.min_amount_eur).replace(",", " ") }} EUR
+                        {% else %}-{% endif %}
+                    </td>
+                    <td class="px-6 py-3 text-gray-600">{{ p.next_deadline or '-' }}</td>
+                    <td class="px-6 py-3 text-right">
+                        <a href="/admin/programs/{{ p.id }}/edit" class="text-indigo-500 hover:text-indigo-700 text-xs mr-3">Modifier</a>
+                        <form method="POST" action="/admin/programs/{{ p.id }}/delete" class="inline">
+                            <button type="submit" onclick="return confirm('Supprimer ce programme ?')"
+                                class="text-red-500 hover:text-red-700 text-xs">Supprimer</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% else %}
+<div class="bg-white rounded-xl shadow-sm border p-8 text-center text-gray-500">
+    Aucun programme. <a href="/admin/programs/new" class="text-indigo-600 hover:underline">Ajouter un programme</a>
+</div>
+{% endif %}
+{% endblock %}

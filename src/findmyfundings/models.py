@@ -14,7 +14,9 @@ class FundingProgram(BaseModel):
     name: str
     project_types: str = ""
     selection_criteria: str = ""
-    submission_dates: str = ""
+    permanent: bool = False
+    start_submission_date: date | None = None
+    end_submission_date: date | None = None
     pdp_axes: str = ""
     comments: str = ""
     source_urls: list[SourceLink] = []
@@ -43,6 +45,9 @@ class FundingExtraction(BaseModel):
     eligible_themes: list[str] = []
     application_type: str | None = None
     next_deadline: date | None = None
+    permanent: bool = False
+    start_submission_date: date | None = None
+    end_submission_date: date | None = None
     summary: str = ""
 
 
