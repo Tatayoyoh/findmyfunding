@@ -44,24 +44,30 @@
                 class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500">{{ program.selection_criteria if program else '' }}</textarea>
         </div>
 
-        <div class="grid md:grid-cols-3 gap-4 items-end">
-            <div>
-                <label for="start_submission_date" class="block text-sm font-medium text-gray-600 mb-1">Début soumission</label>
-                <input type="date" name="start_submission_date" id="start_submission_date"
-                    value="{{ program.start_submission_date if program and program.start_submission_date else '' }}"
-                    class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500" />
+        <div>
+            <label class="block text-sm font-medium text-gray-600 mb-2">Période de soumission</label>
+            <input type="hidden" name="permanent" id="permanent-hidden" value="{{ '1' if program and program.permanent else '' }}">
+            <div class="flex items-center gap-3 mb-3">
+                <button type="button" id="permanent-toggle"
+                    class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 {{ 'bg-indigo-600' if program and program.permanent else 'bg-gray-300' }}"
+                    role="switch" aria-checked="{{ 'true' if program and program.permanent else 'false' }}">
+                    <span class="inline-block h-4 w-4 rounded-full bg-white transition-transform {{ 'translate-x-6' if program and program.permanent else 'translate-x-1' }}"></span>
+                </button>
+                <span class="text-sm font-medium text-gray-600">Permanent <span class="text-gray-400 font-normal">(pas de date limite)</span></span>
             </div>
-            <div>
-                <label for="end_submission_date" class="block text-sm font-medium text-gray-600 mb-1">Fin soumission</label>
-                <input type="date" name="end_submission_date" id="end_submission_date"
-                    value="{{ program.end_submission_date if program and program.end_submission_date else '' }}"
-                    class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500" />
-            </div>
-            <div class="flex items-center gap-2 pb-1">
-                <input type="checkbox" name="permanent" id="permanent" value="1"
-                    {{ 'checked' if program and program.permanent }}
-                    class="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
-                <label for="permanent" class="text-sm font-medium text-gray-600">Permanent (pas de date limite)</label>
+            <div id="date-fields" class="grid md:grid-cols-2 gap-4 {{ 'opacity-40 pointer-events-none' if program and program.permanent }}">
+                <div>
+                    <label for="start_submission_date" class="block text-sm font-medium text-gray-600 mb-1">Début soumission</label>
+                    <input type="date" name="start_submission_date" id="start_submission_date"
+                        value="{{ program.start_submission_date if program and program.start_submission_date else '' }}"
+                        class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500" />
+                </div>
+                <div>
+                    <label for="end_submission_date" class="block text-sm font-medium text-gray-600 mb-1">Fin soumission</label>
+                    <input type="date" name="end_submission_date" id="end_submission_date"
+                        value="{{ program.end_submission_date if program and program.end_submission_date else '' }}"
+                        class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500" />
+                </div>
             </div>
         </div>
 
@@ -201,6 +207,30 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
+    // --- Permanent toggle ---
+    const toggle = document.getElementById('permanent-toggle');
+    const hidden = document.getElementById('permanent-hidden');
+    const dateFields = document.getElementById('date-fields');
+    const dot = toggle.querySelector('span');
+
+    function setPermanent(on) {
+        hidden.value = on ? '1' : '';
+        toggle.setAttribute('aria-checked', on);
+        toggle.classList.toggle('bg-indigo-600', on);
+        toggle.classList.toggle('bg-gray-300', !on);
+        dot.classList.toggle('translate-x-6', on);
+        dot.classList.toggle('translate-x-1', !on);
+        dateFields.classList.toggle('opacity-40', on);
+        dateFields.classList.toggle('pointer-events-none', on);
+        if (on) {
+            document.getElementById('start_submission_date').value = '';
+            document.getElementById('end_submission_date').value = '';
+        }
+    }
+
+    toggle.addEventListener('click', () => setPermanent(hidden.value !== '1'));
+
+    // --- Tag inputs ---
     document.querySelectorAll('.tag-input-wrap').forEach(wrap => {
         const fieldName = wrap.dataset.name;
         const suggestions = JSON.parse(wrap.dataset.suggestions || '[]');
