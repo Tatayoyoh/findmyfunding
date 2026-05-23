@@ -28,13 +28,14 @@
                     <th class="text-left px-6 py-3 text-gray-500 font-medium">Nom</th>
                     <th class="text-left px-6 py-3 text-gray-500 font-medium">Catégorie</th>
                     <th class="text-left px-6 py-3 text-gray-500 font-medium">Montant</th>
-                    <th class="text-left px-6 py-3 text-gray-500 font-medium">Échéance</th>
+                    <th class="text-left px-6 py-3 text-gray-500 font-medium">Soumission</th>
                     <th class="px-6 py-3"></th>
                 </tr>
             </thead>
             <tbody class="divide-y">
                 {% for p in programs %}
-                <tr class="hover:bg-gray-50">
+                {% set expired = p.end_submission_date and p.end_submission_date|string < today()|string and not p.permanent %}
+                <tr class="hover:bg-gray-50 {{ 'bg-red-50/50' if expired }}">
                     <td class="px-6 py-3">
                         <a href="/program/{{ p.id }}" class="text-indigo-600 hover:underline font-medium">{{ p.name }}</a>
                     </td>
@@ -48,7 +49,18 @@
                             À partir de {{ "{:,.0f}".format(p.min_amount_eur).replace(",", " ") }} EUR
                         {% else %}-{% endif %}
                     </td>
-                    <td class="px-6 py-3 text-gray-600">{{ p.next_deadline or '-' }}</td>
+                    <td class="px-6 py-3">
+                        {% if expired %}
+                            <span class="inline-flex items-center gap-1 text-xs font-medium text-red-600">
+                                <span class="w-1.5 h-1.5 rounded-full bg-red-500"></span>
+                                Expiré ({{ p.end_submission_date }})
+                            </span>
+                        {% elif p.permanent %}
+                            <span class="text-xs text-green-600 font-medium">Permanent</span>
+                        {% elif p.end_submission_date %}
+                            <span class="text-xs text-gray-600">Jusqu'au {{ p.end_submission_date }}</span>
+                        {% else %}-{% endif %}
+                    </td>
                     <td class="px-6 py-3 text-right">
                         <a href="/admin/programs/{{ p.id }}/edit" class="text-indigo-500 hover:text-indigo-700 text-xs mr-3">Modifier</a>
                         <form method="POST" action="/admin/programs/{{ p.id }}/delete" class="inline">

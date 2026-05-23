@@ -6,7 +6,15 @@
     <a href="/" class="text-indigo-600 hover:text-indigo-800 text-sm">&larr; Retour à la recherche</a>
 </div>
 
-<div class="bg-white rounded-xl shadow-sm border p-8">
+{% set expired = program.end_submission_date and program.end_submission_date|string < today()|string and not program.permanent %}
+{% if expired %}
+<div class="bg-red-50 border border-red-200 rounded-lg p-4 mb-4 flex items-center gap-3">
+    <span class="w-2 h-2 rounded-full bg-red-500 flex-shrink-0"></span>
+    <p class="text-sm text-red-700 font-medium">La période de soumission est terminée depuis le {{ program.end_submission_date }}.</p>
+</div>
+{% endif %}
+
+<div class="bg-white rounded-xl shadow-sm border p-8 {{ 'border-red-200' if expired }}">
     <div class="mb-6">
         <span class="inline-block text-xs font-medium px-2.5 py-0.5 rounded-full mb-3
             {% if 'européen' in program.category.lower() %}bg-blue-100 text-blue-700

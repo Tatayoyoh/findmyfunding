@@ -1,6 +1,7 @@
 """FastAPI application entry point."""
 
 from contextlib import asynccontextmanager
+from datetime import date
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -31,6 +32,7 @@ app = FastAPI(
 # Templates
 templates_dir = Path(__file__).parent / "templates"
 app.state.templates = Jinja2Templates(directory=str(templates_dir))
+app.state.templates.env.globals["today"] = date.today
 
 # Routers
 app.include_router(search.router)
