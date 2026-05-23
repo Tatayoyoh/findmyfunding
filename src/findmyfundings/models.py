@@ -6,6 +6,9 @@ from pydantic import BaseModel
 class SourceLink(BaseModel):
     url: str
     label: str = ""
+    last_hash: str | None = None
+    last_checked_at: datetime | None = None
+    has_changed: bool = False
 
 
 class FundingProgram(BaseModel):
@@ -51,11 +54,3 @@ class FundingExtraction(BaseModel):
     summary: str = ""
 
 
-class MonitoredSource(BaseModel):
-    id: int | None = None
-    url: str
-    label: str = ""
-    funding_program_id: int | None = None
-    last_content_hash: str | None = None
-    last_checked_at: datetime | None = None
-    has_changed: bool = False

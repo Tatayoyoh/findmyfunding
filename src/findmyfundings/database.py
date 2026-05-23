@@ -65,16 +65,6 @@ CREATE TRIGGER IF NOT EXISTS funding_ad AFTER DELETE ON funding_programs BEGIN
         old.selection_criteria, old.pdp_axes, old.comments);
 END;
 
-CREATE TABLE IF NOT EXISTS monitored_sources (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    url TEXT NOT NULL UNIQUE,
-    label TEXT DEFAULT '',
-    funding_program_id INTEGER REFERENCES funding_programs(id),
-    last_content_hash TEXT,
-    last_checked_at TIMESTAMP,
-    has_changed BOOLEAN DEFAULT 0,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
 """
 
 
@@ -100,8 +90,69 @@ async def init_db():
         columns = {row[1] for row in await cursor.fetchall()}
         if "submission_dates" in columns:
             await _migrate_submission_dates(db)
+
+        # Migrate: monitored_sources → funding_programs.source_urls JSON
+        cursor = await db.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='monitored_sources'"
+        )
+        if await cursor.fetchone():
+            await _migrate_monitored_sources(db)
     finally:
         await db.close()
+
+
+async def _migrate_monitored_sources(db: aiosqlite.Connection):
+    """Fold monitored_sources rows into funding_programs.source_urls JSON entries,
+    then drop the monitored_sources table. Orphan sources (no program) are dropped."""
+    import json
+
+    cursor = await db.execute(
+        "SELECT url, label, funding_program_id, last_content_hash, "
+        "last_checked_at, has_changed FROM monitored_sources "
+        "WHERE funding_program_id IS NOT NULL"
+    )
+    rows = await cursor.fetchall()
+
+    by_program: dict[int, list] = {}
+    for r in rows:
+        by_program.setdefault(r["funding_program_id"], []).append(r)
+
+    for program_id, sources in by_program.items():
+        cursor = await db.execute(
+            "SELECT source_urls FROM funding_programs WHERE id=?", (program_id,)
+        )
+        prog_row = await cursor.fetchone()
+        if not prog_row:
+            continue
+        urls = json.loads(prog_row["source_urls"] or "[]")
+        # Normalize legacy string entries to dicts
+        urls = [
+            u if isinstance(u, dict) else {"url": u, "label": ""}
+            for u in urls
+        ]
+        by_url = {u.get("url"): u for u in urls}
+        for s in sources:
+            existing = by_url.get(s["url"])
+            payload = {
+                "last_hash": s["last_content_hash"],
+                "last_checked_at": s["last_checked_at"],
+                "has_changed": bool(s["has_changed"]),
+            }
+            if existing:
+                existing.update(payload)
+            else:
+                urls.append({
+                    "url": s["url"],
+                    "label": s["label"] or "",
+                    **payload,
+                })
+        await db.execute(
+            "UPDATE funding_programs SET source_urls=? WHERE id=?",
+            (json.dumps(urls, ensure_ascii=False), program_id),
+        )
+
+    await db.execute("DROP TABLE monitored_sources")
+    await db.commit()
 
 
 async def _migrate_submission_dates(db: aiosqlite.Connection):

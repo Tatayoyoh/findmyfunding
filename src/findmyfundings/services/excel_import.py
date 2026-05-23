@@ -256,7 +256,6 @@ async def import_to_db(programs: list[dict]):
     db = await get_db()
     try:
         # Clear existing data
-        await db.execute("DELETE FROM monitored_sources")
         await db.execute("DELETE FROM funding_programs")
         await db.execute("DELETE FROM funding_fts")
 
@@ -284,19 +283,6 @@ async def import_to_db(programs: list[dict]):
             )
             program_id = cursor.lastrowid
             id_map[i] = program_id
-
-            # Register source URLs for monitoring
-            for link in prog["source_urls"]:
-                if link["url"].startswith("http"):
-                    try:
-                        await db.execute(
-                            """INSERT OR IGNORE INTO monitored_sources
-                               (url, label, funding_program_id)
-                               VALUES (?, ?, ?)""",
-                            (link["url"], link["label"], program_id),
-                        )
-                    except Exception:
-                        pass  # Skip duplicate URLs
 
         await db.commit()
 

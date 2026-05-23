@@ -49,19 +49,21 @@ async def add_source(
     url: str = Form(...),
     label: str = Form(""),
 ):
-    """Add a new source URL, scrape it, and extract funding info with AI."""
+    """Add a new source URL → create a funding program with that URL.
+    Runs AI extraction to prefill structured fields when possible."""
     content = await fetch_page_content(url)
     extraction = None
     if content:
         extraction = await extract_funding_info(content)
 
-    if extraction:
-        db = await get_db()
-        try:
-            source_urls = json.dumps(
-                [{"url": url, "label": label}], ensure_ascii=False
-            )
-            cursor = await db.execute(
+    source_urls_json = json.dumps(
+        [{"url": url, "label": label}], ensure_ascii=False
+    )
+
+    db = await get_db()
+    try:
+        if extraction:
+            await db.execute(
                 """INSERT INTO funding_programs
                    (category, name, project_types, source_urls,
                     min_amount_eur, max_amount_eur, cofinancing_pct,
@@ -73,7 +75,7 @@ async def add_source(
                     "Non classifié",
                     label or url[:80],
                     extraction.summary,
-                    source_urls,
+                    source_urls_json,
                     extraction.min_amount_eur,
                     extraction.max_amount_eur,
                     extraction.cofinancing_pct,
@@ -86,47 +88,22 @@ async def add_source(
                     str(extraction.end_submission_date) if extraction.end_submission_date else None,
                 ),
             )
-            program_id = cursor.lastrowid
-
+            message = f"Programme créé et analysé : {extraction.summary[:100]}"
+        else:
             await db.execute(
-                """INSERT OR IGNORE INTO monitored_sources
-                   (url, label, funding_program_id)
+                """INSERT INTO funding_programs
+                   (category, name, source_urls)
                    VALUES (?, ?, ?)""",
-                (url, label, program_id),
+                ("Non classifié", label or url[:80], source_urls_json),
             )
-            await db.commit()
-        finally:
-            await db.close()
-
-        message = f"Source ajoutée et analysée : {extraction.summary[:100]}"
-    else:
-        message = "Source ajoutée mais impossible d'extraire les informations automatiquement."
-        db = await get_db()
-        try:
-            await db.execute(
-                "INSERT OR IGNORE INTO monitored_sources (url, label) VALUES (?, ?)",
-                (url, label),
-            )
-            await db.commit()
-        finally:
-            await db.close()
-
-    return RedirectResponse(
-        f"/admin/programs?message={quote(message)}", status_code=303,
-    )
-
-
-@router.post("/delete-source/{source_id}")
-async def delete_source(request: Request, source_id: int):
-    """Delete a monitored source."""
-    db = await get_db()
-    try:
-        await db.execute("DELETE FROM monitored_sources WHERE id = ?", (source_id,))
+            message = "Programme créé mais impossible d'extraire les informations automatiquement."
         await db.commit()
     finally:
         await db.close()
 
-    return RedirectResponse("/admin/programs", status_code=303)
+    return RedirectResponse(
+        f"/admin/programs?message={quote(message)}", status_code=303,
+    )
 
 
 @router.post("/run-scrape")
@@ -146,12 +123,31 @@ def _parse_comma_list(value: str) -> list[str]:
     return [s.strip() for s in value.split(",") if s.strip()] if value else []
 
 
-def _parse_source_urls(text: str) -> str:
-    """Parse newline-separated URLs into JSON list."""
-    urls = [u.strip() for u in text.splitlines() if u.strip()]
-    return json.dumps(
-        [{"url": u, "label": ""} for u in urls], ensure_ascii=False
-    )
+def _parse_source_urls(text: str, existing: list | None = None) -> str:
+    """Parse newline-separated URLs into JSON list. Preserves scraping
+    metadata (last_hash, last_checked_at, has_changed) when a URL exists
+    in `existing`."""
+    existing_by_url = {}
+    if existing:
+        for e in existing:
+            url = e.url if hasattr(e, "url") else e.get("url")
+            if url:
+                existing_by_url[url] = e
+
+    out = []
+    for line in text.splitlines():
+        url = line.strip()
+        if not url:
+            continue
+        prior = existing_by_url.get(url)
+        if prior is not None:
+            entry = prior.model_dump(mode="json") if hasattr(prior, "model_dump") else dict(prior)
+            entry["url"] = url
+            entry.setdefault("label", "")
+            out.append(entry)
+        else:
+            out.append({"url": url, "label": ""})
+    return json.dumps(out, ensure_ascii=False)
 
 
 @router.get("/programs")
@@ -160,25 +156,6 @@ async def programs_list(
 ):
     """List all funding programs for management."""
     programs = await get_all()
-
-    # Fetch scraping info per program + standalone sources
-    db = await get_db()
-    try:
-        cursor = await db.execute(
-            """SELECT ms.*, fp.name as program_name
-               FROM monitored_sources ms
-               LEFT JOIN funding_programs fp ON ms.funding_program_id = fp.id
-               ORDER BY ms.last_checked_at DESC NULLS LAST"""
-        )
-        sources = [dict(r) for r in await cursor.fetchall()]
-    finally:
-        await db.close()
-
-    sources_by_program: dict[int, list[dict]] = {}
-    for s in sources:
-        pid = s["funding_program_id"]
-        if pid:
-            sources_by_program.setdefault(pid, []).append(s)
 
     truthy = ("1", "true", "on")
     scraping_only = scraping in truthy
@@ -194,15 +171,13 @@ async def programs_list(
         )
 
     if scraping_only:
-        programs = [p for p in programs if p.id in sources_by_program]
+        programs = [p for p in programs if p.source_urls]
     if expired_only:
         programs = [p for p in programs if is_expired(p)]
 
     ctx = {
         "request": request,
         "programs": programs,
-        "sources": sources,
-        "sources_by_program": sources_by_program,
         "scraping_only": scraping_only,
         "expired_only": expired_only,
     }
@@ -331,6 +306,9 @@ async def program_update(
     source_urls: str = Form(""),
 ):
     """Update an existing funding program."""
+    existing = await get_by_id(program_id)
+    existing_urls = existing.source_urls if existing else None
+
     db = await get_db()
     try:
         await db.execute(
@@ -353,7 +331,7 @@ async def program_update(
                 end_submission_date or None,
                 pdp_axes,
                 comments,
-                _parse_source_urls(source_urls),
+                _parse_source_urls(source_urls, existing_urls),
                 min_amount_eur,
                 max_amount_eur,
                 cofinancing_pct,
@@ -376,10 +354,6 @@ async def program_delete(request: Request, program_id: int):
     """Delete a funding program."""
     db = await get_db()
     try:
-        await db.execute(
-            "DELETE FROM monitored_sources WHERE funding_program_id = ?",
-            (program_id,),
-        )
         await db.execute(
             "DELETE FROM funding_programs WHERE id = ?", (program_id,)
         )

@@ -26,12 +26,12 @@ async def monthly_scrape_job():
 
     for result in changed:
         extraction = await extract_funding_info(result["content"])
-        if extraction and result.get("funding_program_id"):
+        if extraction and result.get("program_id"):
             await update_program_with_extraction(
-                result["funding_program_id"], extraction
+                result["program_id"], extraction
             )
             logger.info(
-                f"Updated program {result['funding_program_id']} with AI extraction"
+                f"Updated program {result['program_id']} with AI extraction"
             )
 
 

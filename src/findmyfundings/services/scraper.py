@@ -1,12 +1,14 @@
-"""Web scraper for monitoring funding source URLs."""
+"""Web scraper for monitoring funding program URLs (inline in source_urls JSON)."""
 
 import hashlib
+import json
 from datetime import datetime, timezone
 
 import httpx
 from bs4 import BeautifulSoup
 
 from findmyfundings.database import get_db
+from findmyfundings.services.funding_repo import get_all
 
 
 async def fetch_page_content(url: str) -> str | None:
@@ -23,18 +25,15 @@ async def fetch_page_content(url: str) -> str | None:
 
             content_type = response.headers.get("content-type", "")
             if "pdf" in content_type:
-                return None  # Skip PDFs for now
+                return None
             if "html" not in content_type and "text" not in content_type:
                 return None
 
             soup = BeautifulSoup(response.text, "html.parser")
-
-            # Remove non-content elements
             for tag in soup(["script", "style", "nav", "footer", "header", "aside"]):
                 tag.decompose()
 
             text = soup.get_text(separator="\n", strip=True)
-            # Limit to reasonable size for AI processing
             return text[:15000] if text else None
 
     except (httpx.HTTPError, Exception):
@@ -45,60 +44,57 @@ def content_hash(text: str) -> str:
     return hashlib.sha256(text.encode()).hexdigest()
 
 
-async def scrape_source(source_id: int) -> dict:
-    """Scrape a single monitored source. Returns status info."""
-    db = await get_db()
-    try:
-        cursor = await db.execute(
-            "SELECT * FROM monitored_sources WHERE id = ?", (source_id,)
-        )
-        source = await cursor.fetchone()
-        if not source:
-            return {"status": "error", "message": "Source not found"}
+async def scrape_all() -> list[dict]:
+    """Scrape every URL across every program. Updates per-URL hash + last_checked_at
+    in funding_programs.source_urls. Returns one dict per program summarizing
+    which had any URL change + the merged changed content."""
+    programs = await get_all()
+    results: list[dict] = []
 
-        text = await fetch_page_content(source["url"])
+    for prog in programs:
+        if not prog.source_urls:
+            continue
+
+        updated_urls: list[dict] = []
+        merged_content: list[str] = []
+        any_changed = False
         now = datetime.now(timezone.utc).isoformat()
 
-        if text is None:
+        for entry in prog.source_urls:
+            entry_dict = entry.model_dump(mode="json")
+            text = await fetch_page_content(entry.url)
+            entry_dict["last_checked_at"] = now
+
+            if text is None:
+                # Keep prior hash; mark as not-changed this run
+                entry_dict["has_changed"] = False
+                updated_urls.append(entry_dict)
+                continue
+
+            new_hash = content_hash(text)
+            changed = entry.last_hash != new_hash
+            entry_dict["last_hash"] = new_hash
+            entry_dict["has_changed"] = changed
+            updated_urls.append(entry_dict)
+
+            if changed:
+                any_changed = True
+                merged_content.append(text)
+
+        db = await get_db()
+        try:
             await db.execute(
-                "UPDATE monitored_sources SET last_checked_at = ? WHERE id = ?",
-                (now, source_id),
+                "UPDATE funding_programs SET source_urls=? WHERE id=?",
+                (json.dumps(updated_urls, ensure_ascii=False), prog.id),
             )
             await db.commit()
-            return {"status": "skipped", "message": "Could not fetch content"}
+        finally:
+            await db.close()
 
-        new_hash = content_hash(text)
-        has_changed = source["last_content_hash"] != new_hash
+        results.append({
+            "program_id": prog.id,
+            "has_changed": any_changed,
+            "content": "\n\n".join(merged_content) if any_changed else None,
+        })
 
-        await db.execute(
-            """UPDATE monitored_sources
-               SET last_content_hash = ?, last_checked_at = ?, has_changed = ?
-               WHERE id = ?""",
-            (new_hash, now, has_changed, source_id),
-        )
-        await db.commit()
-
-        return {
-            "status": "ok",
-            "has_changed": has_changed,
-            "content": text if has_changed else None,
-            "funding_program_id": source["funding_program_id"],
-        }
-    finally:
-        await db.close()
-
-
-async def scrape_all() -> list[dict]:
-    """Scrape all monitored sources."""
-    db = await get_db()
-    try:
-        cursor = await db.execute("SELECT id FROM monitored_sources")
-        sources = await cursor.fetchall()
-    finally:
-        await db.close()
-
-    results = []
-    for source in sources:
-        result = await scrape_source(source["id"])
-        results.append(result)
     return results
