@@ -10,6 +10,8 @@ services:
       firecrawl-api:
         condition: service_started
     volumes:
+      - ./src:/app/src 
+      - ./scripts:/app/scripts/
       - db-data:/app/data
     ports:
       - 8000:8000

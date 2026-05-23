@@ -12,10 +12,4 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
 # Copy application code
-COPY src/ src/
-COPY scripts/ scripts/
 COPY data/ data/
-
-# Import Excel data into SQLite at build time
-RUN uv run python scripts/import_excel.py
-

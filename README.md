@@ -29,3 +29,13 @@ uv run python scripts/import_excel.py
 # Lancer un scraping manuel
 uv run python scripts/run_scrape.py
 ```
+
+## Production
+
+```bash
+# Pour avoir les source de build docker compose de Firecrawl
+git clone https://github.com/firecrawl/firecrawl.git
+
+ln -s docker-compose.prod.yml docker-compose.yml
+docker-compose up -d
+```
