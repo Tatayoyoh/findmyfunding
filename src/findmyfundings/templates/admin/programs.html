@@ -118,13 +118,13 @@
                     <th class="px-6 py-3"></th>
                 </tr>
             </thead>
-            <tbody class="divide-y">
+            <tbody>
                 {% for p in programs %}
                 {% set expired = p.end_submission_date and p.end_submission_date|string < today()|string and not p.permanent %}
                 {% set prog_sources = p.source_urls %}
-                <tr class="hover:bg-gray-50 {{ 'bg-red-50/50' if expired }}">
+                <tr class="hover:bg-gray-50 border-t border-gray-200 {{ 'bg-red-50/50' if expired }}">
                     <td class="px-6 py-3">
-                        <a href="/program/{{ p.id }}" class="text-indigo-600 hover:underline font-medium">{{ p.name }}</a>
+                        <a href="/admin/programs/{{ p.id }}/edit" class="text-indigo-600 hover:underline font-medium">{{ p.name }}</a>
                     </td>
                     <td class="px-6 py-3 text-gray-600">{{ p.category }}</td>
                     <td class="px-6 py-3 text-gray-600">
@@ -149,10 +149,17 @@
                         {% else %}-{% endif %}
                     </td>
                     <td class="px-6 py-3 text-right whitespace-nowrap">
-                        <a href="/admin/programs/{{ p.id }}/edit" class="text-indigo-500 hover:text-indigo-700 text-xs mr-3">Modifier</a>
+                        <a href="/admin/programs/{{ p.id }}/edit" class="inline-flex items-center gap-1 text-indigo-500 hover:text-indigo-700 text-xs mr-3">
+                            <i data-lucide="pencil" class="w-3.5 h-3.5"></i> Modifier
+                        </a>
+                        <a href="/program/{{ p.id }}" class="inline-flex items-center gap-1 text-gray-500 hover:text-gray-700 text-xs mr-3">
+                            <i data-lucide="eye" class="w-3.5 h-3.5"></i> Preview
+                        </a>
                         <form method="POST" action="/admin/programs/{{ p.id }}/delete" class="inline">
                             <button type="submit" onclick="return confirm('Supprimer ce programme ?')"
-                                class="text-red-500 hover:text-red-700 text-xs">Supprimer</button>
+                                class="inline-flex items-center gap-1 text-red-500 hover:text-red-700 text-xs">
+                                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Supprimer
+                            </button>
                         </form>
                     </td>
                 </tr>
