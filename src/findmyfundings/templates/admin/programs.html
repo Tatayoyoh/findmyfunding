@@ -50,19 +50,17 @@
         </form>
     </div>
 
-    <div class="bg-white rounded-xl shadow-sm border p-6 flex flex-col">
-        <h2 class="font-semibold text-gray-700 mb-3">Scraping manuel</h2>
-        <p class="text-sm text-gray-500 mb-4 flex-1">
-            Lance manuellement le scraping de toutes les sources. L'IA analyse les pages modifiées.
-        </p>
-        <form method="POST" action="/admin/run-scrape">
-            <button type="submit"
-                class="w-full bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700 transition">
-                Lancer le scraping
-            </button>
-        </form>
-    </div>
+    {% include "admin/partials/scrape_status.html" %}
 </div>
+
+{# Auto-poll on page load if a scrape is already running (e.g. after browser refresh) #}
+{% if scrape_state and scrape_state.running %}
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        htmx.trigger('#scrape-card', 'refresh');
+    });
+</script>
+{% endif %}
 
 {# Build hrefs that toggle one filter while preserving the other #}
 {% set scraping_params = [] %}
@@ -197,6 +195,16 @@
                                 {% endif %}
                             {% else %}
                             <span class="bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">En attente</span>
+                            {% endif %}
+                            {% if loop.first %}
+                            <button type="button"
+                                hx-post="/admin/programs/{{ p.id }}/scrape"
+                                hx-swap="none"
+                                hx-disabled-elt="this"
+                                class="ml-auto inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-800 disabled:opacity-50 disabled:cursor-wait">
+                                <i data-lucide="refresh-cw" class="w-3 h-3 [.htmx-request_&]:animate-spin"></i>
+                                <span>Relancer</span>
+                            </button>
                             {% endif %}
                         </div>
                     </td>

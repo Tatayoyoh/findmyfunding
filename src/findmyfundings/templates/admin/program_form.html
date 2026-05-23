@@ -2,12 +2,38 @@
 {% block title %}{{ "Modifier" if program else "Ajouter" }} un programme - FindMyFundings{% endblock %}
 
 {% block content %}
+<style>
+    #scrape-overlay.htmx-indicator { display: none; }
+    #scrape-overlay.htmx-request.htmx-indicator { display: flex; }
+</style>
 <div class="mb-6">
     <a href="/admin/programs" class="text-indigo-600 hover:text-indigo-800 text-sm">&larr; Retour à la liste</a>
 </div>
 
-<div class="bg-white rounded-xl shadow-sm border p-8 max-w-3xl">
-    <h1 class="text-2xl font-bold text-gray-800 mb-6">{{ "Modifier" if program else "Ajouter" }} un programme</h1>
+<div id="program-form-card" class="relative bg-white rounded-xl shadow-sm border p-8 max-w-3xl">
+    {# Loading overlay shown during HTMX rescrape request — covers entire card #}
+    {% if program %}
+    <div id="scrape-overlay" class="htmx-indicator absolute inset-0 z-10 bg-white/85 backdrop-blur-sm rounded-xl flex flex-col items-center justify-center gap-3">
+        <i data-lucide="loader-2" class="w-8 h-8 text-indigo-600 animate-spin"></i>
+        <p class="text-sm text-gray-700 font-medium">Scraping en cours…</p>
+        <p class="text-xs text-gray-500">Cela peut prendre quelques secondes</p>
+    </div>
+    {% endif %}
+
+    <div class="flex items-start justify-between mb-6 gap-4">
+        <h1 class="text-2xl font-bold text-gray-800">{{ "Modifier" if program else "Ajouter" }} un programme</h1>
+        {% if program and program.source_urls %}
+        <button type="button"
+            hx-post="/admin/programs/{{ program.id }}/scrape"
+            hx-swap="none"
+            hx-disabled-elt="this"
+            hx-indicator="#scrape-overlay"
+            class="inline-flex items-center gap-1.5 bg-green-600 hover:bg-green-700 text-white text-sm px-3 py-1.5 rounded-lg disabled:opacity-50 disabled:cursor-wait flex-shrink-0">
+            <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+            Relancer le scraping
+        </button>
+        {% endif %}
+    </div>
 
     <form method="POST" class="space-y-6">
         <!-- Basic info -->

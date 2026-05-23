@@ -32,9 +32,41 @@
     <footer class="border-t mt-12 py-6 text-center text-gray-500 text-sm">
         FindMyFundings &mdash; Cartographie des financements pour les structures
     </footer>
+
+    {# Toast host : any fragment can inject <template data-toast data-toast-kind="error|success|info"> here #}
+    <div id="toast-host" class="fixed bottom-6 right-6 z-50 flex flex-col gap-2 max-w-md"></div>
+
     <script>
         lucide.createIcons();
-        document.body.addEventListener('htmx:afterSwap', () => lucide.createIcons());
+
+        function showToast(message, kind = "info", durationMs = 6000) {
+            const host = document.getElementById('toast-host');
+            if (!host) return;
+            const colors = {
+                error:   'bg-red-50 border-red-200 text-red-700',
+                success: 'bg-green-50 border-green-200 text-green-700',
+                info:    'bg-indigo-50 border-indigo-200 text-indigo-700',
+            };
+            const icons = { error: 'alert-triangle', success: 'check-circle-2', info: 'info' };
+            const el = document.createElement('div');
+            el.className = `flex items-start gap-2 border rounded-lg p-3 shadow-md text-sm transition-opacity duration-300 ${colors[kind] || colors.info}`;
+            el.innerHTML = `<i data-lucide="${icons[kind] || icons.info}" class="w-4 h-4 mt-0.5 flex-shrink-0"></i><span class="flex-1">${message}</span><button class="text-current opacity-60 hover:opacity-100" onclick="this.parentElement.remove()">×</button>`;
+            host.appendChild(el);
+            lucide.createIcons();
+            setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 300); }, durationMs);
+        }
+
+        function _flushToastTemplates() {
+            document.querySelectorAll('#toast-host template[data-toast]').forEach(tpl => {
+                showToast(tpl.innerHTML.trim(), tpl.dataset.toastKind || 'info');
+                tpl.remove();
+            });
+        }
+        _flushToastTemplates();
+        document.body.addEventListener('htmx:afterSwap', () => {
+            lucide.createIcons();
+            _flushToastTemplates();
+        });
     </script>
 </body>
 </html>

@@ -8,7 +8,7 @@ from typing import Optional
 from urllib.parse import quote
 
 from fastapi import APIRouter, Request, Form
-from fastapi.responses import RedirectResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 
 from findmyfundings.config import settings
 from findmyfundings.database import get_db
@@ -16,7 +16,17 @@ from findmyfundings.services.excel_import import parse_excel, import_to_db
 from findmyfundings.services.funding_repo import (
     get_all, get_by_id, get_categories, get_all_suggestions,
 )
-from findmyfundings.services.scraper import scrape_program
+import asyncio
+
+from findmyfundings.services.scraper import (
+    scrape_program,
+    scrape_one,
+    get_scrape_state,
+    mark_scrape_starting,
+    is_program_scraping,
+    start_program_scrape,
+    end_program_scrape,
+)
 from findmyfundings.services.scheduler import monthly_scrape_job
 
 router = APIRouter(prefix="/admin")
@@ -113,10 +123,65 @@ async def add_source(
 
 @router.post("/run-scrape")
 async def run_scrape(request: Request):
-    """Trigger a manual scrape of all sources."""
-    await monthly_scrape_job()
-    return RedirectResponse(
-        "/admin/programs?message=Scraping+termin%C3%A9.", status_code=303,
+    """Launch a manual scrape in the background. Returns immediately with the
+    initial status fragment for HTMX to poll."""
+    state = get_scrape_state()
+    if not state["running"]:
+        mark_scrape_starting()
+        asyncio.create_task(monthly_scrape_job())
+    return request.app.state.templates.TemplateResponse(
+        "admin/partials/scrape_status.html",
+        {"request": request, "state": get_scrape_state()},
+    )
+
+
+@router.get("/scrape-status")
+async def scrape_status(request: Request):
+    """HTMX polling endpoint — returns the current scrape state fragment."""
+    return request.app.state.templates.TemplateResponse(
+        "admin/partials/scrape_status.html",
+        {"request": request, "state": get_scrape_state()},
+    )
+
+
+def _toast_html(message: str, kind: str = "info") -> str:
+    """Build an OOB toast template for HTMX to flush into #toast-host."""
+    safe = (message or "").replace("<", "&lt;").replace(">", "&gt;")
+    return (
+        '<div hx-swap-oob="beforeend:#toast-host">'
+        f'<template data-toast data-toast-kind="{kind}">{safe}</template>'
+        '</div>'
+    )
+
+
+@router.post("/programs/{program_id}/scrape")
+async def scrape_single_program(request: Request, program_id: int):
+    """Trigger a Firecrawl scrape for ONE program. Synchronous: blocks until done.
+    On success: HX-Refresh so the caller page reloads with fresh data.
+    On error: returns an OOB toast template."""
+    prog = await get_by_id(program_id)
+    if not prog:
+        return HTMLResponse(_toast_html("Programme introuvable", "error"), status_code=404)
+
+    if is_program_scraping(program_id):
+        return HTMLResponse(
+            _toast_html(f"Scraping déjà en cours pour « {prog.name } »", "info"),
+            status_code=409,
+        )
+
+    start_program_scrape(program_id)
+    try:
+        ok, error = await scrape_one(prog)
+    finally:
+        end_program_scrape(program_id)
+
+    if ok:
+        # Page reload → form/row se met à jour automatiquement avec les nouvelles données
+        return HTMLResponse(_toast_html(f"« {prog.name} » scrapé avec succès", "success"), headers={"HX-Refresh": "true"})
+
+    return HTMLResponse(
+        _toast_html(f"Erreur scraping « {prog.name} » : {error or 'inconnue'}", "error"),
+        status_code=200,
     )
 
 
@@ -185,6 +250,8 @@ async def programs_list(
         "programs": programs,
         "scraping_only": scraping_only,
         "expired_only": expired_only,
+        "state": get_scrape_state(),
+        "scrape_state": get_scrape_state(),
     }
     if message:
         ctx["message"] = message

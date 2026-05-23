@@ -1,0 +1,77 @@
+{# Fragment HTMX : remplace #scrape-card. Auto-poll si running, sinon arrête. #}
+{% set running = state.running %}
+{% set has_errors = state.errors > 0 %}
+{% set total = state.total or 1 %}
+{% set pct = (state.done * 100 // total) if state.done else 0 %}
+
+<div id="scrape-card"
+    {% if running %}hx-get="/admin/scrape-status" hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}
+    class="bg-white rounded-xl shadow-sm border p-6 flex flex-col">
+    <h2 class="font-semibold text-gray-700 mb-3">Scraping manuel</h2>
+
+    {% if running %}
+    <div class="flex-1">
+        <div class="flex items-center gap-2 text-sm text-indigo-600 mb-3">
+            <i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i>
+            <span>Scraping en cours… {{ state.done }} / {{ state.total }}</span>
+        </div>
+        <div class="w-full bg-gray-200 rounded-full h-2 mb-2">
+            <div class="bg-indigo-600 h-2 rounded-full transition-all" style="width: {{ pct }}%"></div>
+        </div>
+        {% if state.current_program %}
+        <p class="text-xs text-gray-500 truncate">→ {{ state.current_program }}</p>
+        {% endif %}
+        {% if state.errors %}
+        <p class="text-xs text-red-600 mt-2">{{ state.errors }} erreur{{ 's' if state.errors > 1 else '' }} jusqu'ici</p>
+        {% endif %}
+    </div>
+    <button type="button" disabled
+        class="w-full bg-gray-300 text-gray-500 px-4 py-2 rounded-lg text-sm cursor-not-allowed">
+        En cours…
+    </button>
+
+    {% elif state.finished_at %}
+    <div class="flex-1 mb-3">
+        {% if has_errors %}
+        <div class="flex items-center gap-2 text-sm text-amber-600 mb-2">
+            <i data-lucide="alert-triangle" class="w-4 h-4"></i>
+            <span>Terminé avec erreurs : {{ state.ok }} ok / {{ state.errors }} erreur{{ 's' if state.errors > 1 else '' }}</span>
+        </div>
+        {% if state.last_error %}
+        <p class="text-xs text-red-600 truncate" title="{{ state.last_error }}">{{ state.last_error[:120] }}</p>
+        {% endif %}
+        {% else %}
+        <div class="flex items-center gap-2 text-sm text-green-600">
+            <i data-lucide="check-circle-2" class="w-4 h-4"></i>
+            <span>{{ state.ok }} programme{{ 's' if state.ok > 1 else '' }} scrapé{{ 's' if state.ok > 1 else '' }} avec succès</span>
+        </div>
+        {% endif %}
+    </div>
+    <form method="POST" action="/admin/run-scrape"
+        hx-post="/admin/run-scrape" hx-target="#scrape-card" hx-swap="outerHTML">
+        <button type="submit"
+            class="w-full bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700 transition">
+            Relancer le scraping
+        </button>
+    </form>
+
+    {% if has_errors %}
+    {# Toast injected once when transitioning from running → finished with errors #}
+    <div hx-swap-oob="beforeend:#toast-host">
+        <template data-toast data-toast-kind="error">{{ state.errors }} programme{{ 's' if state.errors > 1 else '' }} en erreur lors du scraping{% if state.last_error %} — {{ state.last_error[:140] }}{% endif %}</template>
+    </div>
+    {% endif %}
+
+    {% else %}
+    <p class="text-sm text-gray-500 mb-4 flex-1">
+        Lance manuellement le scraping de toutes les sources. L'IA analyse les pages modifiées.
+    </p>
+    <form method="POST" action="/admin/run-scrape"
+        hx-post="/admin/run-scrape" hx-target="#scrape-card" hx-swap="outerHTML">
+        <button type="submit"
+            class="w-full bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700 transition">
+            Lancer le scraping
+        </button>
+    </form>
+    {% endif %}
+</div>

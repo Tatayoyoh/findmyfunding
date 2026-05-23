@@ -20,6 +20,76 @@ from findmyfundings.services.funding_repo import get_all
 logger = logging.getLogger(__name__)
 
 
+# In-memory state of the current scrape run. Reset at each scrape_all() call.
+_state: dict = {
+    "running": False,
+    "started_at": None,
+    "finished_at": None,
+    "total": 0,
+    "done": 0,
+    "ok": 0,
+    "errors": 0,
+    "last_error": None,
+    "current_program": None,
+}
+
+
+def get_scrape_state() -> dict:
+    return dict(_state)
+
+
+_running_program_ids: set[int] = set()
+
+
+def is_program_scraping(program_id: int) -> bool:
+    return program_id in _running_program_ids
+
+
+def start_program_scrape(program_id: int):
+    _running_program_ids.add(program_id)
+
+
+def end_program_scrape(program_id: int):
+    _running_program_ids.discard(program_id)
+
+
+def mark_scrape_starting():
+    """Flag a scrape as starting before the background task actually begins,
+    so the UI shows the loader immediately on POST response."""
+    _state.update({
+        "running": True,
+        "started_at": datetime.now(timezone.utc).isoformat(),
+        "finished_at": None,
+        "total": 0,
+        "done": 0,
+        "ok": 0,
+        "errors": 0,
+        "last_error": None,
+        "current_program": "Initialisation…",
+    })
+
+
+def _reset_state(total: int):
+    _state.update({
+        "running": True,
+        "started_at": datetime.now(timezone.utc).isoformat(),
+        "finished_at": None,
+        "total": total,
+        "done": 0,
+        "ok": 0,
+        "errors": 0,
+        "last_error": None,
+        "current_program": None,
+    })
+
+
+def _mark_done(running: bool = False):
+    _state["running"] = running
+    if not running:
+        _state["finished_at"] = datetime.now(timezone.utc).isoformat()
+        _state["current_program"] = None
+
+
 EXTRACTION_PROMPT = """Tu analyses des pages web décrivant des programmes de financement
 pour des structures (associations, ONG, coopératives, entreprises sociales).
 
@@ -126,6 +196,32 @@ async def _mark_failed(program_id: int, scraped_at: str, source_urls: list[dict]
         await db.close()
 
 
+async def scrape_one(prog) -> tuple[bool, str | None]:
+    """Scrape + persist a single program. Returns (ok, error_message).
+    Reusable by scrape_all() and the per-program admin endpoint."""
+    urls = [s.url for s in prog.source_urls if s.url.startswith("http")]
+    if not urls:
+        return False, "Aucune URL exploitable"
+
+    now = datetime.now(timezone.utc).isoformat()
+    touched_urls = [
+        {**s.model_dump(mode="json"), "last_checked_at": now}
+        for s in prog.source_urls
+    ]
+
+    try:
+        extraction = await scrape_program(prog.id, urls)
+        if extraction is None:
+            await _mark_failed(prog.id, now, touched_urls, "empty extraction")
+            return False, "Extraction vide"
+        await _persist_extraction(prog.id, extraction, now, touched_urls)
+        return True, None
+    except Exception as exc:
+        logger.warning(f"Firecrawl extract failed for program {prog.id}: {exc}")
+        await _mark_failed(prog.id, now, touched_urls, str(exc))
+        return False, str(exc)
+
+
 async def scrape_program(program_id: int, urls: list[str]) -> FundingExtraction | None:
     """Extract structured data for one program via Firecrawl."""
     if not urls:
@@ -133,7 +229,7 @@ async def scrape_program(program_id: int, urls: list[str]) -> FundingExtraction 
     fc = _client()
     response = await fc.extract(
         urls=urls,
-        schema=FundingExtraction,
+        schema=FundingExtraction.model_json_schema(),
         prompt=EXTRACTION_PROMPT,
     )
     data = getattr(response, "data", None) or getattr(response, "json", None) or {}
@@ -145,34 +241,24 @@ async def scrape_program(program_id: int, urls: list[str]) -> FundingExtraction 
 async def scrape_all() -> list[dict]:
     """Iterate every program, scrape its URLs via Firecrawl, persist extraction."""
     programs = await get_all()
+    scrapeable = [p for p in programs if p.source_urls and any(s.url.startswith("http") for s in p.source_urls)]
+
+    _reset_state(total=len(scrapeable))
     results: list[dict] = []
-    now = datetime.now(timezone.utc).isoformat()
 
-    for prog in programs:
-        if not prog.source_urls:
-            continue
-
-        urls = [s.url for s in prog.source_urls if s.url.startswith("http")]
-        if not urls:
-            continue
-
-        # Mark check timestamp on every URL (success or fail)
-        touched_urls = [
-            {**s.model_dump(mode="json"), "last_checked_at": now}
-            for s in prog.source_urls
-        ]
-
-        try:
-            extraction = await scrape_program(prog.id, urls)
-            if extraction is None:
-                await _mark_failed(prog.id, now, touched_urls, "empty extraction")
-                results.append({"program_id": prog.id, "status": "empty"})
-                continue
-            await _persist_extraction(prog.id, extraction, now, touched_urls)
-            results.append({"program_id": prog.id, "status": "ok"})
-        except Exception as exc:
-            logger.warning(f"Firecrawl extract failed for program {prog.id}: {exc}")
-            await _mark_failed(prog.id, now, touched_urls, str(exc))
-            results.append({"program_id": prog.id, "status": "error", "error": str(exc)})
+    try:
+        for prog in scrapeable:
+            _state["current_program"] = prog.name
+            ok, error = await scrape_one(prog)
+            if ok:
+                _state["ok"] += 1
+                results.append({"program_id": prog.id, "status": "ok"})
+            else:
+                _state["errors"] += 1
+                _state["last_error"] = f"{prog.name} : {error}"
+                results.append({"program_id": prog.id, "status": "error", "error": error})
+            _state["done"] += 1
+    finally:
+        _mark_done(running=False)
 
     return results
