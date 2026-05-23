@@ -23,6 +23,7 @@ services:
       - "traefik.http.routers.findmyfundings.rule=Host(`${TRAEFIK_DOMAIN}`)"
       - "traefik.http.routers.findmyfundings.tls=${TRAEFIK_TLS}"
       - "traefik.http.routers.findmyfundings.entrypoints=${TRAEFIK_ENTRYPOINTS}"
+      - "traefik.http.routers.findmyfundings.tls.certresolver=${TRAEFIK_CERTRESOLVER}"
       - "traefik.http.services.findmyfundings.loadbalancer.server.port=8000"
 
   # === Firecrawl self-hosted stack ===
