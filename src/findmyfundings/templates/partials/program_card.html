@@ -20,10 +20,20 @@
 
     <h3 class="font-semibold text-gray-800 mb-2 line-clamp-2">{{ program.name }}</h3>
 
-    {% if program.project_types %}
+    {% if program.summary %}
+    <p class="text-sm text-gray-600 line-clamp-3 mb-3 flex-1">{{ program.summary[:200] }}</p>
+    {% elif program.project_types %}
     <p class="text-sm text-gray-600 line-clamp-3 mb-3 flex-1">{{ program.project_types[:200] }}</p>
     {% else %}
     <div class="flex-1"></div>
+    {% endif %}
+
+    {% if program.tags %}
+    <div class="flex flex-wrap gap-1 mb-3">
+        {% for t in program.tags[:3] %}
+        <span class="bg-gray-100 text-gray-600 text-[10px] px-1.5 py-0.5 rounded-full">{{ t }}</span>
+        {% endfor %}
+    </div>
     {% endif %}
 
     <div class="mt-auto pt-3 border-t border-gray-100 flex items-center justify-between gap-2">

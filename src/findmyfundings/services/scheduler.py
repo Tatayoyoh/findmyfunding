@@ -6,10 +6,6 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 from findmyfundings.services.scraper import scrape_all
-from findmyfundings.services.ai_extractor import (
-    extract_funding_info,
-    update_program_with_extraction,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -17,22 +13,12 @@ scheduler = AsyncIOScheduler()
 
 
 async def monthly_scrape_job():
-    """Scrape all sources and run AI extraction on changed ones."""
+    """Scrape every program via Firecrawl (which also handles LLM extraction)."""
     logger.info("Starting monthly scrape job")
     results = await scrape_all()
-
-    changed = [r for r in results if r.get("has_changed") and r.get("content")]
-    logger.info(f"Scraped {len(results)} sources, {len(changed)} changed")
-
-    for result in changed:
-        extraction = await extract_funding_info(result["content"])
-        if extraction and result.get("program_id"):
-            await update_program_with_extraction(
-                result["program_id"], extraction
-            )
-            logger.info(
-                f"Updated program {result['program_id']} with AI extraction"
-            )
+    ok = sum(1 for r in results if r["status"] == "ok")
+    errors = sum(1 for r in results if r["status"] == "error")
+    logger.info(f"Scraped {len(results)} programs: {ok} ok, {errors} errors")
 
 
 def start_scheduler():

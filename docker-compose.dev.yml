@@ -11,19 +11,11 @@ services:
         condition: service_started
     volumes:
       - db-data:/app/data
+    ports:
+      - 8000:8000
+    command: uv run uvicorn findmyfundings.main:app --host 0.0.0.0 --port 8000 --app-dir src --reload
     networks:
-      - traefik-network
       - firecrawl-backend
-    expose:
-      - 8000
-    command: uv run uvicorn findmyfundings.main:app --host 0.0.0.0 --port 8000 --app-dir src
-    labels:
-      - "traefik.enable=true"
-      - "traefik.docker.network=traefik-network"
-      - "traefik.http.routers.findmyfundings.rule=Host(`${TRAEFIK_DOMAIN}`)"
-      - "traefik.http.routers.findmyfundings.tls=${TRAEFIK_TLS}"
-      - "traefik.http.routers.findmyfundings.entrypoints=${TRAEFIK_ENTRYPOINTS}"
-      - "traefik.http.services.findmyfundings.loadbalancer.server.port=8000"
 
   # === Firecrawl self-hosted stack ===
 
@@ -163,7 +155,5 @@ volumes:
   firecrawl-postgres-data:
 
 networks:
-  traefik-network:
-    external: true
   firecrawl-backend:
     driver: bridge

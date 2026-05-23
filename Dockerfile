@@ -19,6 +19,3 @@ COPY data/ data/
 # Import Excel data into SQLite at build time
 RUN uv run python scripts/import_excel.py
 
-EXPOSE 8000
-
-CMD ["uv", "run", "uvicorn", "findmyfundings.main:app", "--host", "0.0.0.0", "--port", "8000", "--app-dir", "src"]

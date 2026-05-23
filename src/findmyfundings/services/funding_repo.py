@@ -11,8 +11,11 @@ def _row_to_program(row) -> FundingProgram:
     source_urls_raw = json.loads(row["source_urls"] or "[]")
     source_urls = [SourceLink(**s) if isinstance(s, dict) else SourceLink(url=s) for s in source_urls_raw]
 
-    eligible_structures = json.loads(row["eligible_structures"] or "[]")
-    eligible_themes = json.loads(row["eligible_themes"] or "[]")
+    def _j(col: str) -> list:
+        try:
+            return json.loads(row[col] or "[]")
+        except (KeyError, IndexError):
+            return []
 
     return FundingProgram(
         id=row["id"],
@@ -29,10 +32,16 @@ def _row_to_program(row) -> FundingProgram:
         min_amount_eur=row["min_amount_eur"],
         max_amount_eur=row["max_amount_eur"],
         cofinancing_pct=row["cofinancing_pct"],
-        eligible_structures=eligible_structures,
-        eligible_themes=eligible_themes,
+        eligible_structures=_j("eligible_structures"),
+        eligible_themes=_j("eligible_themes"),
         application_type=row["application_type"],
         next_deadline=row["next_deadline"],
+        summary=(row["summary"] or "") if "summary" in row.keys() else "",
+        eligibility_criteria=_j("eligibility_criteria"),
+        fundable_axes=_j("fundable_axes"),
+        relevant_links=_j("relevant_links"),
+        pdf_documents=_j("pdf_documents"),
+        tags=_j("tags"),
         last_scraped_at=row["last_scraped_at"],
         last_updated_at=row["last_updated_at"],
         created_at=row["created_at"],

@@ -6,8 +6,8 @@ Application web pour aider les structures (associations, ONG, coopératives, etc
 
 - **Backend** : Python 3.12+ / FastAPI / SQLite (FTS5) / Jinja2
 - **Frontend** : HTMX + Tailwind CSS (CDN) + Lucide icons (CDN)
-- **Scraping** : httpx + BeautifulSoup
-- **Extraction IA** : Anthropic Claude API (claude-sonnet-4-20250514)
+- **Scraping + extraction** : Firecrawl self-hébergé (intégré au `docker-compose.prod.yml` comme services `firecrawl-*`, port 3002) → endpoint `/extract` avec schéma Pydantic. Voir `firecrawl/README.md` pour le setup.
+- **LLM** : DeepSeek (`deepseek-chat`) via API OpenAI-compatible. Utilisé par Firecrawl (extraction structurée) et par `excel_import.py` (parse dates de soumission)
 - **Scheduler** : APScheduler (scraping mensuel le 1er du mois à 3h)
 - **Package manager** : `uv`
 
@@ -47,9 +47,8 @@ src/findmyfundings/
 │   ├── excel_import.py  # Parse Excel (cellules fusionnées, hyperlinks)
 │   ├── funding_repo.py  # CRUD funding_programs
 │   ├── search_service.py # Recherche FTS5 + filtres
-│   ├── scraper.py       # Fetch + parse URLs
-│   ├── ai_extractor.py  # Claude API extraction structurée
-│   └── scheduler.py     # APScheduler mensuel
+│   ├── scraper.py       # Firecrawl extract → FundingExtraction (Pydantic schema)
+│   └── scheduler.py     # APScheduler mensuel → scrape_all()
 └── templates/           # Jinja2 + HTMX
 ```
 
@@ -72,9 +71,11 @@ Une seule table métier : `funding_programs`. Les URLs sources sont stockées **
 [{"url": "...", "label": "...", "last_hash": "...", "last_checked_at": "...", "has_changed": false}]
 ```
 
-Champs scraping (`last_hash`, `last_checked_at`, `has_changed`) populés par le scheduler à chaque run. La table `monitored_sources` n'existe plus (fusionnée dans `source_urls`). Migration auto au startup via `database.py:_migrate_monitored_sources`.
+Champs `last_checked_at` populés par le scraper à chaque run (Firecrawl ne donne pas de hash natif). La table `monitored_sources` n'existe plus (fusionnée dans `source_urls`). Migration auto au startup via `database.py:_migrate_monitored_sources`.
 
-`scraper.scrape_all()` itère les programmes, fetch chaque URL, compare le hash, met à jour le JSON inline. Si ≥1 URL change → contenu fusionné renvoyé pour ré-extraction IA via `ai_extractor`.
+Colonnes JSON additionnelles sur `funding_programs` (extraction Firecrawl) : `summary`, `eligibility_criteria`, `fundable_axes`, `relevant_links`, `pdf_documents`, `tags`. Migration `_migrate_firecrawl_columns` ajoute les colonnes manquantes au startup.
+
+`scraper.scrape_all()` itère les programmes, passe toutes leurs URLs à `Firecrawl.extract()` avec le schéma `FundingExtraction` (Pydantic), puis persiste les champs structurés en DB. Pas de change-detection par hash dans cette version — re-extraction complète à chaque scrape (coût DeepSeek négligeable, ~30c pour 60 progs).
 
 ## Pages admin
 

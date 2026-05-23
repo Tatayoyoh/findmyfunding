@@ -7,8 +7,8 @@ Extracts hyperlinks from column I.
 import json
 import re
 
-import anthropic
 import openpyxl
+from openai import OpenAI
 from openpyxl.cell.cell import MergedCell
 
 from findmyfundings.config import settings
@@ -194,7 +194,7 @@ Texte : {text}"""
 
 
 def _extract_submission_dates_ai(texts: list[dict]) -> list[dict]:
-    """Use Claude to batch-extract structured dates from submission_dates text.
+    """Use DeepSeek (OpenAI-compatible) to batch-extract structured dates.
 
     Args:
         texts: list of {"id": int, "text": str}
@@ -202,12 +202,10 @@ def _extract_submission_dates_ai(texts: list[dict]) -> list[dict]:
     Returns:
         list of {"id": int, "permanent": bool, "start": str|None, "end": str|None}
     """
-    if not settings.anthropic_api_key or not texts:
+    if not settings.deepseek_api_key or not texts:
         return []
 
-    prompt_parts = []
-    for item in texts:
-        prompt_parts.append(f"[ID={item['id']}] {item['text']}")
+    prompt_parts = [f"[ID={item['id']}] {item['text']}" for item in texts]
 
     batch_prompt = """Analyse ces textes décrivant les dates de soumission de programmes de financement.
 
@@ -226,18 +224,30 @@ Textes :
 """ + "\n".join(prompt_parts)
 
     try:
-        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-        message = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=2048,
-            messages=[{"role": "user", "content": batch_prompt}],
+        client = OpenAI(
+            api_key=settings.deepseek_api_key,
+            base_url=settings.deepseek_base_url,
         )
-        response_text = message.content[0].text.strip()
+        completion = client.chat.completions.create(
+            model=settings.deepseek_model,
+            messages=[{"role": "user", "content": batch_prompt}],
+            max_tokens=2048,
+            response_format={"type": "json_object"},
+        )
+        response_text = completion.choices[0].message.content.strip()
         if response_text.startswith("```"):
             response_text = response_text.split("\n", 1)[1]
             response_text = response_text.rsplit("```", 1)[0]
 
-        results = json.loads(response_text)
+        parsed = json.loads(response_text)
+        # DeepSeek with json_object mode wraps arrays — accept both shapes
+        if isinstance(parsed, dict):
+            results = parsed.get("results") or next(
+                (v for v in parsed.values() if isinstance(v, list)), []
+            )
+        else:
+            results = parsed
+
         return [
             {
                 "id": r["id"],

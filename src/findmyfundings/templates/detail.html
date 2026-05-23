@@ -27,6 +27,20 @@
             {{ program.category }}
         </span>
         <h1 class="text-2xl font-bold text-gray-800">{{ program.name }}</h1>
+
+        {% if program.tags %}
+        <div class="flex flex-wrap gap-1.5 mt-3">
+            {% for tag in program.tags %}
+            <span class="inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 text-xs px-2 py-0.5 rounded-full border border-indigo-100">
+                <i data-lucide="tag" class="w-3 h-3"></i>{{ tag }}
+            </span>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if program.summary %}
+        <p class="mt-4 text-gray-600 text-sm leading-relaxed">{{ program.summary }}</p>
+        {% endif %}
     </div>
 
     <!-- Structured info bar -->
@@ -107,10 +121,26 @@
         </div>
         {% endif %}
 
-        {% if program.pdp_axes %}
+        {% if program.fundable_axes %}
+        <div>
+            <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">Axes finançables</h2>
+            <ul class="list-disc list-inside text-gray-700 space-y-1">
+                {% for a in program.fundable_axes %}<li>{{ a }}</li>{% endfor %}
+            </ul>
+        </div>
+        {% elif program.pdp_axes %}
         <div>
             <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">Axes finançables</h2>
             <div class="text-gray-700 whitespace-pre-line">{{ program.pdp_axes }}</div>
+        </div>
+        {% endif %}
+
+        {% if program.eligibility_criteria %}
+        <div>
+            <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">Critères d'éligibilité</h2>
+            <ul class="list-disc list-inside text-gray-700 space-y-1">
+                {% for c in program.eligibility_criteria %}<li>{{ c }}</li>{% endfor %}
+            </ul>
         </div>
         {% endif %}
 
@@ -143,15 +173,45 @@
         </div>
         {% endif %}
 
+        {% if program.pdf_documents %}
+        <div>
+            <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">Documents PDF</h2>
+            <div class="space-y-1">
+                {% for pdf in program.pdf_documents %}
+                <a href="{{ pdf }}" target="_blank" rel="noopener"
+                   class="inline-flex items-center gap-2 text-red-600 hover:text-red-800 text-sm truncate max-w-full">
+                    <i data-lucide="file-text" class="w-4 h-4 flex-shrink-0"></i>
+                    <span class="truncate">{{ pdf }}</span>
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        {% if program.relevant_links %}
+        <div>
+            <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">Liens pertinents</h2>
+            <div class="space-y-1">
+                {% for link in program.relevant_links %}
+                <a href="{{ link }}" target="_blank" rel="noopener"
+                   class="inline-flex items-center gap-2 text-indigo-600 hover:text-indigo-800 text-sm truncate max-w-full">
+                    <i data-lucide="link" class="w-4 h-4 flex-shrink-0"></i>
+                    <span class="truncate">{{ link }}</span>
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
         {% if program.source_urls %}
         <div>
-            <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">Liens</h2>
+            <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">Sources</h2>
             <div class="space-y-1">
                 {% for link in program.source_urls %}
                 <a href="{{ link.url }}" target="_blank" rel="noopener"
-                   class="block text-indigo-600 hover:text-indigo-800 text-sm truncate">
-                    {{ link.label or link.url }}
-                    <span class="text-gray-400 text-xs ml-1">&nearr;</span>
+                   class="inline-flex items-center gap-2 text-indigo-600 hover:text-indigo-800 text-sm truncate max-w-full">
+                    <i data-lucide="external-link" class="w-4 h-4 flex-shrink-0"></i>
+                    <span class="truncate">{{ link.label or link.url }}</span>
                 </a>
                 {% endfor %}
             </div>

@@ -125,6 +125,14 @@
                 <tr class="hover:bg-gray-50 border-t border-gray-200 {{ 'bg-red-50/50' if expired }}">
                     <td class="px-6 py-3">
                         <a href="/admin/programs/{{ p.id }}/edit" class="text-indigo-600 hover:underline font-medium">{{ p.name }}</a>
+                        {% if p.tags %}
+                        <div class="flex flex-wrap gap-1 mt-1">
+                            {% for t in p.tags[:4] %}
+                            <span class="bg-indigo-50 text-indigo-600 text-[10px] px-1.5 py-0.5 rounded-full">{{ t }}</span>
+                            {% endfor %}
+                            {% if p.tags|length > 4 %}<span class="text-[10px] text-gray-400">+{{ p.tags|length - 4 }}</span>{% endif %}
+                        </div>
+                        {% endif %}
                     </td>
                     <td class="px-6 py-3 text-gray-600">{{ p.category }}</td>
                     <td class="px-6 py-3 text-gray-600">

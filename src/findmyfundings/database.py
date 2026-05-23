@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS funding_programs (
     comments TEXT DEFAULT '',
     source_urls TEXT DEFAULT '[]',
 
-    -- Structured fields (AI-extracted, nullable)
+    -- Structured fields (Firecrawl-extracted, nullable)
     min_amount_eur INTEGER,
     max_amount_eur INTEGER,
     cofinancing_pct INTEGER,
@@ -24,6 +24,14 @@ CREATE TABLE IF NOT EXISTS funding_programs (
     eligible_themes TEXT DEFAULT '[]',
     application_type TEXT,
     next_deadline DATE,
+
+    -- New extraction fields (JSON lists)
+    summary TEXT DEFAULT '',
+    eligibility_criteria TEXT DEFAULT '[]',
+    fundable_axes TEXT DEFAULT '[]',
+    relevant_links TEXT DEFAULT '[]',
+    pdf_documents TEXT DEFAULT '[]',
+    tags TEXT DEFAULT '[]',
 
     -- Metadata
     last_scraped_at TIMESTAMP,
@@ -97,8 +105,32 @@ async def init_db():
         )
         if await cursor.fetchone():
             await _migrate_monitored_sources(db)
+
+        # Migrate: add Firecrawl extraction columns to existing DBs
+        await _migrate_firecrawl_columns(db)
     finally:
         await db.close()
+
+
+async def _migrate_firecrawl_columns(db: aiosqlite.Connection):
+    """Add new columns introduced by the Firecrawl extraction refactor."""
+    cursor = await db.execute("PRAGMA table_info(funding_programs)")
+    cols = {row[1] for row in await cursor.fetchall()}
+
+    additions = [
+        ("summary", "TEXT DEFAULT ''"),
+        ("eligibility_criteria", "TEXT DEFAULT '[]'"),
+        ("fundable_axes", "TEXT DEFAULT '[]'"),
+        ("relevant_links", "TEXT DEFAULT '[]'"),
+        ("pdf_documents", "TEXT DEFAULT '[]'"),
+        ("tags", "TEXT DEFAULT '[]'"),
+    ]
+    for name, definition in additions:
+        if name not in cols:
+            await db.execute(
+                f"ALTER TABLE funding_programs ADD COLUMN {name} {definition}"
+            )
+    await db.commit()
 
 
 async def _migrate_monitored_sources(db: aiosqlite.Connection):

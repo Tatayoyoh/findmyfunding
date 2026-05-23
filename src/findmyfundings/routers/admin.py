@@ -16,11 +16,7 @@ from findmyfundings.services.excel_import import parse_excel, import_to_db
 from findmyfundings.services.funding_repo import (
     get_all, get_by_id, get_categories, get_all_suggestions,
 )
-from findmyfundings.services.scraper import fetch_page_content
-from findmyfundings.services.ai_extractor import (
-    extract_funding_info,
-    update_program_with_extraction,
-)
+from findmyfundings.services.scraper import scrape_program
 from findmyfundings.services.scheduler import monthly_scrape_job
 
 router = APIRouter(prefix="/admin")
@@ -50,11 +46,12 @@ async def add_source(
     label: str = Form(""),
 ):
     """Add a new source URL → create a funding program with that URL.
-    Runs AI extraction to prefill structured fields when possible."""
-    content = await fetch_page_content(url)
+    Runs Firecrawl extraction to prefill structured fields when possible."""
     extraction = None
-    if content:
-        extraction = await extract_funding_info(content)
+    try:
+        extraction = await scrape_program(program_id=0, urls=[url])
+    except Exception:
+        extraction = None
 
     source_urls_json = json.dumps(
         [{"url": url, "label": label}], ensure_ascii=False
@@ -65,22 +62,29 @@ async def add_source(
         if extraction:
             await db.execute(
                 """INSERT INTO funding_programs
-                   (category, name, project_types, source_urls,
+                   (category, name, project_types, summary, source_urls,
                     min_amount_eur, max_amount_eur, cofinancing_pct,
-                    eligible_structures, eligible_themes,
+                    eligibility_criteria, eligible_structures, eligible_themes,
+                    fundable_axes, relevant_links, pdf_documents, tags,
                     application_type, next_deadline,
                     permanent, start_submission_date, end_submission_date)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     "Non classifié",
-                    label or url[:80],
+                    extraction.name or label or url[:80],
+                    extraction.project_types,
                     extraction.summary,
                     source_urls_json,
                     extraction.min_amount_eur,
                     extraction.max_amount_eur,
                     extraction.cofinancing_pct,
+                    json.dumps(extraction.eligibility_criteria, ensure_ascii=False),
                     json.dumps(extraction.eligible_structures, ensure_ascii=False),
                     json.dumps(extraction.eligible_themes, ensure_ascii=False),
+                    json.dumps(extraction.fundable_axes, ensure_ascii=False),
+                    json.dumps(extraction.relevant_links, ensure_ascii=False),
+                    json.dumps(extraction.pdf_documents, ensure_ascii=False),
+                    json.dumps(extraction.tags, ensure_ascii=False),
                     extraction.application_type,
                     str(extraction.next_deadline) if extraction.next_deadline else None,
                     extraction.permanent,
@@ -88,7 +92,8 @@ async def add_source(
                     str(extraction.end_submission_date) if extraction.end_submission_date else None,
                 ),
             )
-            message = f"Programme créé et analysé : {extraction.summary[:100]}"
+            preview = (extraction.summary or extraction.name or "")[:100]
+            message = f"Programme créé et analysé : {preview}"
         else:
             await db.execute(
                 """INSERT INTO funding_programs
@@ -96,7 +101,7 @@ async def add_source(
                    VALUES (?, ?, ?)""",
                 ("Non classifié", label or url[:80], source_urls_json),
             )
-            message = "Programme créé mais impossible d'extraire les informations automatiquement."
+            message = "Programme créé mais extraction Firecrawl indisponible."
         await db.commit()
     finally:
         await db.close()
