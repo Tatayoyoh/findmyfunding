@@ -6,6 +6,7 @@
     <title>{% block title %}FindMyFundings{% endblock %}</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
     <style>
         .htmx-indicator { display: none; }
         .htmx-request .htmx-indicator { display: inline-block; }
@@ -31,5 +32,9 @@
     <footer class="border-t mt-12 py-6 text-center text-gray-500 text-sm">
         FindMyFundings &mdash; Cartographie des financements pour les structures
     </footer>
+    <script>
+        lucide.createIcons();
+        document.body.addEventListener('htmx:afterSwap', () => lucide.createIcons());
+    </script>
 </body>
 </html>
