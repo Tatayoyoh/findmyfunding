@@ -5,6 +5,7 @@ import json
 import shutil
 from datetime import date
 from typing import Optional
+from urllib.parse import quote
 
 from fastapi import APIRouter, Request, Form
 from fastapi.responses import RedirectResponse, StreamingResponse
@@ -26,24 +27,9 @@ router = APIRouter(prefix="/admin")
 
 
 @router.get("/")
-async def admin_index(request: Request, message: str = ""):
-    db = await get_db()
-    try:
-        cursor = await db.execute(
-            """SELECT ms.*, fp.name as program_name
-               FROM monitored_sources ms
-               LEFT JOIN funding_programs fp ON ms.funding_program_id = fp.id
-               ORDER BY ms.last_checked_at DESC NULLS LAST"""
-        )
-        sources = await cursor.fetchall()
-    finally:
-        await db.close()
-
-    ctx = {"request": request, "sources": sources}
-    if message:
-        ctx["message"] = message
+async def admin_index(request: Request):
     return request.app.state.templates.TemplateResponse(
-        "admin/sources.html", ctx,
+        "admin/index.html", {"request": request},
     )
 
 
@@ -51,13 +37,9 @@ async def admin_index(request: Request, message: str = ""):
 async def run_excel_import(request: Request):
     programs = parse_excel(settings.excel_path)
     count = await import_to_db(programs)
-    return request.app.state.templates.TemplateResponse(
-        "admin/sources.html",
-        {
-            "request": request,
-            "sources": [],
-            "message": f"{count} programmes importés avec succès.",
-        },
+    return RedirectResponse(
+        f"/admin/programs?message={count}+programmes+import%C3%A9s+avec+succ%C3%A8s.",
+        status_code=303,
     )
 
 
@@ -68,14 +50,12 @@ async def add_source(
     label: str = Form(""),
 ):
     """Add a new source URL, scrape it, and extract funding info with AI."""
-    # Fetch content
     content = await fetch_page_content(url)
     extraction = None
     if content:
         extraction = await extract_funding_info(content)
 
     if extraction:
-        # Create a new funding program from extraction
         db = await get_db()
         try:
             source_urls = json.dumps(
@@ -131,22 +111,8 @@ async def add_source(
         finally:
             await db.close()
 
-    # Redirect back to admin with message
-    db = await get_db()
-    try:
-        cursor = await db.execute(
-            """SELECT ms.*, fp.name as program_name
-               FROM monitored_sources ms
-               LEFT JOIN funding_programs fp ON ms.funding_program_id = fp.id
-               ORDER BY ms.last_checked_at DESC NULLS LAST"""
-        )
-        sources = await cursor.fetchall()
-    finally:
-        await db.close()
-
-    return request.app.state.templates.TemplateResponse(
-        "admin/sources.html",
-        {"request": request, "sources": sources, "message": message},
+    return RedirectResponse(
+        f"/admin/programs?message={quote(message)}", status_code=303,
     )
 
 
@@ -160,14 +126,16 @@ async def delete_source(request: Request, source_id: int):
     finally:
         await db.close()
 
-    return await admin_index(request)
+    return RedirectResponse("/admin/programs", status_code=303)
 
 
 @router.post("/run-scrape")
 async def run_scrape(request: Request):
     """Trigger a manual scrape of all sources."""
     await monthly_scrape_job()
-    return await admin_index(request)
+    return RedirectResponse(
+        "/admin/programs?message=Scraping+termin%C3%A9.", status_code=303,
+    )
 
 
 # --- Programs CRUD ---
@@ -187,12 +155,61 @@ def _parse_source_urls(text: str) -> str:
 
 
 @router.get("/programs")
-async def programs_list(request: Request):
+async def programs_list(
+    request: Request, message: str = "", scraping: str = "", expired: str = "",
+):
     """List all funding programs for management."""
     programs = await get_all()
+
+    # Fetch scraping info per program + standalone sources
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            """SELECT ms.*, fp.name as program_name
+               FROM monitored_sources ms
+               LEFT JOIN funding_programs fp ON ms.funding_program_id = fp.id
+               ORDER BY ms.last_checked_at DESC NULLS LAST"""
+        )
+        sources = [dict(r) for r in await cursor.fetchall()]
+    finally:
+        await db.close()
+
+    sources_by_program: dict[int, list[dict]] = {}
+    for s in sources:
+        pid = s["funding_program_id"]
+        if pid:
+            sources_by_program.setdefault(pid, []).append(s)
+
+    truthy = ("1", "true", "on")
+    scraping_only = scraping in truthy
+    expired_only = expired in truthy
+
+    today_str = date.today().isoformat()
+
+    def is_expired(p) -> bool:
+        return bool(
+            p.end_submission_date
+            and str(p.end_submission_date) < today_str
+            and not p.permanent
+        )
+
+    if scraping_only:
+        programs = [p for p in programs if p.id in sources_by_program]
+    if expired_only:
+        programs = [p for p in programs if is_expired(p)]
+
+    ctx = {
+        "request": request,
+        "programs": programs,
+        "sources": sources,
+        "sources_by_program": sources_by_program,
+        "scraping_only": scraping_only,
+        "expired_only": expired_only,
+    }
+    if message:
+        ctx["message"] = message
     return request.app.state.templates.TemplateResponse(
-        "admin/programs.html",
-        {"request": request, "programs": programs},
+        "admin/programs.html", ctx,
     )
 
 
@@ -460,7 +477,7 @@ async def export_db():
     """Download a copy of the SQLite database."""
     db_path = settings.db_path
     if not db_path.exists():
-        return RedirectResponse("/admin", status_code=303)
+        return RedirectResponse("/admin/programs", status_code=303)
 
     buf = io.BytesIO()
     with open(db_path, "rb") as f:
