@@ -9,6 +9,7 @@ data which we persist back to funding_programs.
 import json
 import logging
 from datetime import datetime, timezone
+from pathlib import Path
 
 from firecrawl import AsyncFirecrawl
 
@@ -90,7 +91,7 @@ def _mark_done(running: bool = False):
         _state["current_program"] = None
 
 
-EXTRACTION_PROMPT = """Tu analyses des pages web décrivant des programmes de financement
+DEFAULT_EXTRACTION_PROMPT = """Tu analyses des pages web décrivant des programmes de financement
 pour des structures (associations, ONG, coopératives, entreprises sociales).
 
 Extrais les informations selon le schéma demandé. Sois rigoureux :
@@ -105,6 +106,32 @@ Extrais les informations selon le schéma demandé. Sois rigoureux :
   vers des documents téléchargeables (règlement, dossier de candidature).
 - Si une information n'est pas trouvée, laisse null/liste vide. Ne devine pas.
 """
+
+
+def _prompt_file() -> Path:
+    return Path(settings.database_path).parent / "scraping_prompt.txt"
+
+
+def get_extraction_prompt() -> str:
+    """Read the persisted prompt from disk, fallback to default."""
+    path = _prompt_file()
+    if path.exists():
+        text = path.read_text(encoding="utf-8").strip()
+        if text:
+            return text
+    return DEFAULT_EXTRACTION_PROMPT
+
+
+def set_extraction_prompt(text: str) -> None:
+    """Persist prompt to disk. Empty input = revert to default (delete file)."""
+    path = _prompt_file()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    cleaned = (text or "").strip()
+    if not cleaned:
+        if path.exists():
+            path.unlink()
+        return
+    path.write_text(cleaned, encoding="utf-8")
 
 
 def _client() -> AsyncFirecrawl:
@@ -230,7 +257,7 @@ async def scrape_program(program_id: int, urls: list[str]) -> FundingExtraction 
     response = await fc.extract(
         urls=urls,
         schema=FundingExtraction.model_json_schema(),
-        prompt=EXTRACTION_PROMPT,
+        prompt=get_extraction_prompt(),
     )
     data = getattr(response, "data", None) or getattr(response, "json", None) or {}
     if not data:

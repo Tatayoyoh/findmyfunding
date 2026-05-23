@@ -26,6 +26,9 @@ from findmyfundings.services.scraper import (
     is_program_scraping,
     start_program_scrape,
     end_program_scrape,
+    get_extraction_prompt,
+    set_extraction_prompt,
+    DEFAULT_EXTRACTION_PROMPT,
 )
 from findmyfundings.services.scheduler import monthly_scrape_job
 
@@ -151,6 +154,37 @@ def _toast_html(message: str, kind: str = "info") -> str:
         '<div hx-swap-oob="beforeend:#toast-host">'
         f'<template data-toast data-toast-kind="{kind}">{safe}</template>'
         '</div>'
+    )
+
+
+@router.get("/prompt")
+async def prompt_get(request: Request):
+    """Return the modal fragment with the current extraction prompt."""
+    return request.app.state.templates.TemplateResponse(
+        "admin/partials/prompt_modal.html",
+        {
+            "request": request,
+            "current": get_extraction_prompt(),
+            "default": DEFAULT_EXTRACTION_PROMPT,
+            "is_default": get_extraction_prompt() == DEFAULT_EXTRACTION_PROMPT,
+        },
+    )
+
+
+@router.post("/prompt")
+async def prompt_save(request: Request, prompt: str = Form("")):
+    """Persist the new prompt. Empty input reverts to default."""
+    set_extraction_prompt(prompt)
+    kind = "info" if not prompt.strip() else "success"
+    msg = (
+        "Prompt remis aux valeurs par défaut"
+        if not prompt.strip()
+        else "Prompt mis à jour"
+    )
+    # OOB toast + close modal via HX-Trigger event listened by client JS
+    return HTMLResponse(
+        _toast_html(msg, kind),
+        headers={"HX-Trigger": "prompt-saved"},
     )
 
 
