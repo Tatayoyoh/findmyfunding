@@ -13,10 +13,10 @@ from pathlib import Path
 
 from firecrawl import AsyncFirecrawl
 
-from findmyfundings.config import settings
-from findmyfundings.database import get_db
-from findmyfundings.models import FundingExtraction
-from findmyfundings.services.funding_repo import get_all
+from src.config import settings
+from src.database import get_db
+from src.models import FundingExtraction
+from src.services.funding_repo import get_all
 
 logger = logging.getLogger(__name__)
 

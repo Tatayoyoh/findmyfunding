@@ -13,7 +13,7 @@ uv sync
 
 Lancer le serveur de développement
 ```bash
-uv run uvicorn findmyfundings.main:app --reload --app-dir src
+uv run fastapi dev
 ```
 
 Lancer les tests

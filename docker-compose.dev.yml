@@ -15,7 +15,7 @@ services:
       - db-data:/app/data
     ports:
       - 8000:8000
-    command: uv run uvicorn findmyfundings.main:app --host 0.0.0.0 --port 8000 --app-dir src --reload
+    command: uv run fastapi dev
     networks:
       - firecrawl-backend
 

@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Query, Request
 
-from findmyfundings.services import funding_repo, search_service
+from src.services import funding_repo, search_service
 
 router = APIRouter()
 

@@ -18,7 +18,7 @@ services:
       - firecrawl-backend
     expose:
       - 8000
-    command: uv run uvicorn findmyfundings.main:app --host 0.0.0.0 --port 8000 --app-dir src
+    command: uv run fastapi run
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=traefik-network"

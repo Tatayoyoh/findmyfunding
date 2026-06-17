@@ -7,9 +7,9 @@ from pathlib import Path
 # Add src to path for direct execution
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from findmyfundings.config import settings
-from findmyfundings.database import init_db
-from findmyfundings.services.excel_import import parse_excel, import_to_db
+from src.config import settings
+from src.database import init_db
+from src.services.excel_import import parse_excel, import_to_db
 
 
 async def run():

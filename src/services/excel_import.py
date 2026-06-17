@@ -11,8 +11,8 @@ import openpyxl
 from openai import OpenAI
 from openpyxl.cell.cell import MergedCell
 
-from findmyfundings.config import settings
-from findmyfundings.database import get_db
+from src.config import settings
+from src.database import get_db
 
 _AMOUNT_RE = re.compile(
     r'(\d[\d\s.,]*)\s*(k€|K€|k ?euros?|K ?euros?|M€|M ?euros?|€|euros?)',

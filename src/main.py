@@ -7,9 +7,9 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.templating import Jinja2Templates
 
-from findmyfundings.database import init_db
-from findmyfundings.routers import search, programs, admin, api
-from findmyfundings.services.scheduler import start_scheduler, stop_scheduler
+from src.database import init_db
+from src.routers import search, programs, admin, api
+from src.services.scheduler import start_scheduler, stop_scheduler
 
 
 @asynccontextmanager

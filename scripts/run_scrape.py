@@ -6,8 +6,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from findmyfundings.database import init_db
-from findmyfundings.services.scheduler import monthly_scrape_job
+from src.database import init_db
+from src.services.scheduler import monthly_scrape_job
 
 
 async def run():

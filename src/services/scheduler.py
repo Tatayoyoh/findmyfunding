@@ -5,7 +5,7 @@ import logging
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
-from findmyfundings.services.scraper import scrape_all
+from src.services.scraper import scrape_all
 
 logger = logging.getLogger(__name__)
 

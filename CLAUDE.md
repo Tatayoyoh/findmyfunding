@@ -21,7 +21,7 @@ uv sync
 uv run python scripts/import_excel.py
 
 # Lancer le serveur de développement
-uv run uvicorn findmyfundings.main:app --reload --app-dir src
+uv run fastapi dev main:app --reload --app-dir src
 
 # Lancer un scraping manuel
 uv run python scripts/run_scrape.py
@@ -33,7 +33,7 @@ uv run pytest tests/
 ## Structure du projet
 
 ```
-src/findmyfundings/
+src/
 ├── main.py              # Entry point FastAPI + lifespan
 ├── config.py            # Settings (pydantic-settings, .env)
 ├── database.py          # SQLite connection, schema, FTS5

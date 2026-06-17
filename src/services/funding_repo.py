@@ -2,8 +2,8 @@
 
 import json
 
-from findmyfundings.database import get_db
-from findmyfundings.models import FundingProgram, SourceLink
+from src.database import get_db
+from src.models import FundingProgram, SourceLink
 
 
 def _row_to_program(row) -> FundingProgram:

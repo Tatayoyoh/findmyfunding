@@ -1,6 +1,6 @@
 import aiosqlite
 
-from findmyfundings.config import settings
+from src.config import settings
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS funding_programs (

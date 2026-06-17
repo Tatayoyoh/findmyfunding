@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Request, HTTPException
 
-from findmyfundings.services import funding_repo
+from src.services import funding_repo
 
 router = APIRouter()
 

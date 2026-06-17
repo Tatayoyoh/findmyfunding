@@ -10,15 +10,15 @@ from urllib.parse import quote
 from fastapi import APIRouter, Request, Form
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 
-from findmyfundings.config import settings
-from findmyfundings.database import get_db
-from findmyfundings.services.excel_import import parse_excel, import_to_db
-from findmyfundings.services.funding_repo import (
+from src.config import settings
+from src.database import get_db
+from src.services.excel_import import parse_excel, import_to_db
+from src.services.funding_repo import (
     get_all, get_by_id, get_categories, get_all_suggestions,
 )
 import asyncio
 
-from findmyfundings.services.scraper import (
+from src.services.scraper import (
     scrape_program,
     scrape_one,
     get_scrape_state,
@@ -30,7 +30,7 @@ from findmyfundings.services.scraper import (
     set_extraction_prompt,
     DEFAULT_EXTRACTION_PROMPT,
 )
-from findmyfundings.services.scheduler import monthly_scrape_job
+from src.services.scheduler import monthly_scrape_job
 
 router = APIRouter(prefix="/admin")
 

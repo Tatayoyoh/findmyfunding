@@ -1,8 +1,8 @@
 """Full-text search service using SQLite FTS5."""
 
-from findmyfundings.database import get_db
-from findmyfundings.services.funding_repo import _row_to_program
-from findmyfundings.models import FundingProgram
+from src.database import get_db
+from src.services.funding_repo import _row_to_program
+from src.models import FundingProgram
 
 
 async def search(
