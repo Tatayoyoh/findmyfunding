@@ -10,12 +10,13 @@ services:
       firecrawl-api:
         condition: service_started
     volumes:
-      - ./src:/app/src 
-      - ./scripts:/app/scripts/
+      - ./pyproject.toml:/app/pyproject.toml:ro
+      - ./src:/app/src:ro
+      - ./scripts:/app/scripts/:ro
       - db-data:/app/data
     ports:
       - 8000:8000
-    command: uv run fastapi dev
+    command: uv run fastapi dev --host 0.0.0.0
     networks:
       - firecrawl-backend
 
