@@ -40,6 +40,19 @@ CREATE TABLE IF NOT EXISTS funding_programs (
     scrape_status TEXT DEFAULT 'pending'
 );
 
+-- Version history: one snapshot per edit / scrape
+CREATE TABLE IF NOT EXISTS program_versions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    program_id INTEGER NOT NULL,
+    change_type TEXT NOT NULL DEFAULT 'edit',
+    snapshot TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (program_id) REFERENCES funding_programs(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_program_versions_program
+    ON program_versions(program_id, created_at DESC);
+
 CREATE VIRTUAL TABLE IF NOT EXISTS funding_fts USING fts5(
     name, category, project_types, selection_criteria,
     pdp_axes, comments,
@@ -108,8 +121,29 @@ async def init_db():
 
         # Migrate: add Firecrawl extraction columns to existing DBs
         await _migrate_firecrawl_columns(db)
+
+        # Backfill: every program must have a baseline version (current state)
+        await _backfill_program_versions(db)
     finally:
         await db.close()
+
+
+async def _backfill_program_versions(db: aiosqlite.Connection):
+    """Snapshot any program that has no version yet, using its own
+    last_updated_at as the baseline timestamp."""
+    cursor = await db.execute(
+        "SELECT id, last_updated_at, created_at FROM funding_programs "
+        "WHERE id NOT IN (SELECT DISTINCT program_id FROM program_versions)"
+    )
+    rows = await cursor.fetchall()
+    if not rows:
+        return
+
+    from src.services.version_repo import snapshot_program
+
+    for row in rows:
+        ts = row["last_updated_at"] or row["created_at"]
+        await snapshot_program(row["id"], "edit", created_at=ts)
 
 
 async def _migrate_firecrawl_columns(db: aiosqlite.Connection):

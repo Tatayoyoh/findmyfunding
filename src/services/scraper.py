@@ -336,6 +336,8 @@ async def scrape_one(prog) -> tuple[bool, str | None]:
             await _mark_failed(prog.id, now, touched_urls, "empty extraction")
             return False, "Extraction vide"
         await _persist_extraction(prog.id, extraction, now, touched_urls)
+        from src.services.version_repo import snapshot_program
+        await snapshot_program(prog.id, "scrape")
         return True, None
     except Exception as exc:
         logger.warning(f"Extraction failed for program {prog.id}: {exc}")

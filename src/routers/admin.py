@@ -8,13 +8,18 @@ from typing import Optional
 from urllib.parse import quote
 
 from fastapi import APIRouter, Request, Form
-from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import (
+    HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse,
+)
 
 from src.config import settings
 from src.database import get_db
 from src.services.excel_import import parse_excel, import_to_db
 from src.services.funding_repo import (
     get_all, get_by_id, get_categories, get_all_suggestions,
+)
+from src.services.version_repo import (
+    snapshot_program, get_versions, get_version, delete_version,
 )
 import asyncio
 
@@ -334,7 +339,7 @@ async def program_create(
     """Create a new funding program manually."""
     db = await get_db()
     try:
-        await db.execute(
+        cursor = await db.execute(
             """INSERT INTO funding_programs
                (category, name, project_types, selection_criteria,
                 permanent, start_submission_date, end_submission_date,
@@ -364,9 +369,11 @@ async def program_create(
             ),
         )
         await db.commit()
+        new_id = cursor.lastrowid
     finally:
         await db.close()
 
+    await snapshot_program(new_id, "edit")
     return RedirectResponse("/admin/programs", status_code=303)
 
 
@@ -378,6 +385,7 @@ async def program_edit_form(request: Request, program_id: int):
         return RedirectResponse("/admin/programs", status_code=303)
     categories = await get_categories()
     suggestions = await get_all_suggestions()
+    versions = await get_versions(program_id)
     return request.app.state.templates.TemplateResponse(
         "admin/program_form.html",
         {
@@ -385,8 +393,27 @@ async def program_edit_form(request: Request, program_id: int):
             "program": program,
             "categories": categories,
             "suggestions": suggestions,
+            "versions": versions,
         },
     )
+
+
+@router.get("/programs/{program_id}/versions/{version_id}")
+async def program_version(program_id: int, version_id: int):
+    """Return a single version snapshot as JSON (used to fill the edit form)."""
+    data = await get_version(program_id, version_id)
+    if data is None:
+        return JSONResponse({"error": "not found"}, status_code=404)
+    return JSONResponse(data)
+
+
+@router.post("/programs/{program_id}/versions/{version_id}/delete")
+async def program_version_delete(program_id: int, version_id: int):
+    """Delete a single version of a program's history."""
+    removed = await delete_version(program_id, version_id)
+    if not removed:
+        return JSONResponse({"error": "not found"}, status_code=404)
+    return JSONResponse({"ok": True})
 
 
 @router.post("/programs/{program_id}/edit")
@@ -452,6 +479,7 @@ async def program_update(
     finally:
         await db.close()
 
+    await snapshot_program(program_id, "edit")
     return RedirectResponse("/admin/programs", status_code=303)
 
 

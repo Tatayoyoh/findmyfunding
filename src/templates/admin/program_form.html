@@ -10,7 +10,8 @@
     <a href="/admin/programs" class="text-indigo-600 hover:text-indigo-800 text-sm">&larr; Retour à la liste</a>
 </div>
 
-<div id="program-form-card" class="relative bg-white rounded-xl shadow-sm border p-8 max-w-3xl">
+<div class="flex flex-col lg:flex-row gap-6 items-start">
+<div id="program-form-card" class="relative bg-white rounded-xl shadow-sm border p-8 w-full max-w-3xl flex-1">
     {# Loading overlay shown during HTMX rescrape request — covers entire card #}
     {% if program %}
     <div id="scrape-overlay" class="htmx-indicator absolute inset-0 z-10 bg-white/85 backdrop-blur-sm rounded-xl flex flex-col items-center justify-center gap-3">
@@ -191,7 +192,56 @@
     </form>
 </div>
 
+{% if program %}
+<aside class="w-full lg:w-72 flex-shrink-0 bg-white rounded-xl shadow-sm border p-5">
+    <div class="flex items-center gap-2 mb-1">
+        <i data-lucide="history" class="w-5 h-5 text-indigo-600"></i>
+        <h2 class="text-lg font-semibold text-gray-800">Historique</h2>
+    </div>
+    <p class="text-xs text-gray-500 mb-4">Cliquez une version pour visualiser les données d'historique. Enregistrez pour créer une nouvelle version.</p>
+    <ul id="version-list" class="space-y-1 {{ 'hidden' if not versions }}">
+        {% for v in versions %}
+        <li class="version-li flex items-stretch gap-1">
+            <button type="button" class="version-item flex-1 text-left px-3 py-2 rounded-lg hover:bg-indigo-50 transition border border-transparent"
+                data-version-id="{{ v.id }}" data-created-at="{{ v.created_at }}">
+                <span class="block text-sm font-medium text-gray-700 version-date">{{ v.created_at }}</span>
+                <span class="inline-flex items-center gap-1 mt-0.5 text-xs {{ 'text-green-600' if v.change_type == 'scrape' else 'text-gray-500' }}">
+                    <i data-lucide="{{ 'refresh-cw' if v.change_type == 'scrape' else 'pencil' }}" class="w-3 h-3"></i>
+                    {{ 'Scraping' if v.change_type == 'scrape' else 'Modification' }}
+                </span>
+            </button>
+            <button type="button" class="version-delete flex-shrink-0 px-2 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition"
+                data-version-id="{{ v.id }}" data-created-at="{{ v.created_at }}" title="Supprimer cette version">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+            </button>
+        </li>
+        {% endfor %}
+    </ul>
+    <p id="version-empty" class="text-sm text-gray-400 italic {{ 'hidden' if versions }}">Aucune version enregistrée.</p>
+</aside>
+
+{# Confirmation modal for deleting a version #}
+<div id="version-delete-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div class="absolute inset-0 bg-black/40" data-close></div>
+    <div class="relative bg-white rounded-xl shadow-xl border w-full max-w-sm p-6">
+        <div class="flex items-center gap-3 mb-3">
+            <div class="flex-shrink-0 w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+                <i data-lucide="trash-2" class="w-5 h-5 text-red-600"></i>
+            </div>
+            <h3 class="text-lg font-semibold text-gray-800">Supprimer la version</h3>
+        </div>
+        <p class="text-sm text-gray-600 mb-5">Voulez-vous vraiment supprimer la version du <span id="version-delete-date" class="font-medium text-gray-800"></span> ? Cette action est irréversible.</p>
+        <div class="flex justify-end gap-3">
+            <button type="button" data-close class="px-4 py-2 rounded-lg text-sm border text-gray-600 hover:bg-gray-50 transition">Annuler</button>
+            <button type="button" id="version-delete-confirm" class="px-4 py-2 rounded-lg text-sm bg-red-600 text-white hover:bg-red-700 transition">Supprimer</button>
+        </div>
+    </div>
+</div>
+{% endif %}
+</div>
+
 <style>
+    .version-item.active { background: #eef2ff; border-color: #c7d2fe; }
     .tag-input {
         display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
         border: 1px solid #d1d5db; border-radius: 0.5rem; padding: 6px 10px;
@@ -416,6 +466,137 @@ document.addEventListener('DOMContentLoaded', () => {
         // Init with existing values
         initial.forEach(v => { if (v.trim()) tags.push(v.trim()); });
         renderChips();
+
+        // Expose a setter so version history can repopulate the tags
+        wrap._setTags = (arr) => {
+            tags.length = 0;
+            (arr || []).forEach(v => {
+                const s = (v || '').trim();
+                if (s && !tags.includes(s)) tags.push(s);
+            });
+            input.value = '';
+            renderChips();
+        };
+    });
+
+    // --- Version history: format dates + fill form on click ---
+    const fmt = new Intl.DateTimeFormat('fr-FR', {
+        day: '2-digit', month: 'short', year: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+    });
+
+    function parseTs(raw) {
+        // SQLite "YYYY-MM-DD HH:MM:SS" is UTC; normalize to ISO with Z
+        const iso = raw.includes('T') ? raw : raw.replace(' ', 'T') + 'Z';
+        const d = new Date(iso);
+        return isNaN(d) ? null : d;
+    }
+
+    document.querySelectorAll('.version-item').forEach(btn => {
+        const d = parseTs(btn.dataset.createdAt);
+        if (d) btn.querySelector('.version-date').textContent = fmt.format(d);
+    });
+
+    function setField(id, value) {
+        const el = document.getElementById(id);
+        if (el) el.value = (value === null || value === undefined) ? '' : value;
+    }
+
+    function setTagField(name, arr) {
+        const wrap = document.querySelector(`.tag-input-wrap[data-name="${name}"]`);
+        if (wrap && wrap._setTags) wrap._setTags(arr);
+    }
+
+    async function loadVersion(btn) {
+        const url = `${window.location.pathname.replace(/\/edit$/, '')}/versions/${btn.dataset.versionId}`;
+        let data;
+        try {
+            const res = await fetch(url);
+            if (!res.ok) return;
+            data = await res.json();
+        } catch (e) { return; }
+
+        document.querySelectorAll('.version-item').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+
+        setField('name', data.name);
+        setField('category', data.category);
+        setField('project_types', data.project_types);
+        setField('selection_criteria', data.selection_criteria);
+        setField('pdp_axes', data.pdp_axes);
+        setField('comments', data.comments);
+        setField('start_submission_date', data.start_submission_date);
+        setField('end_submission_date', data.end_submission_date);
+        setField('min_amount_eur', data.min_amount_eur);
+        setField('max_amount_eur', data.max_amount_eur);
+        setField('cofinancing_pct', data.cofinancing_pct);
+        setField('application_type', data.application_type);
+        setField('next_deadline', data.next_deadline);
+
+        setPermanent(!!data.permanent);
+
+        setTagField('eligible_structures', data.eligible_structures);
+        setTagField('eligible_themes', data.eligible_themes);
+
+        const urls = (data.source_urls || []).map(s => s.url).filter(Boolean);
+        setField('source_urls', urls.join('\n'));
+    }
+
+    document.querySelectorAll('.version-item').forEach(btn => {
+        btn.addEventListener('click', () => loadVersion(btn));
+    });
+
+    // --- Version delete: confirmation modal ---
+    const modal = document.getElementById('version-delete-modal');
+    const modalDate = document.getElementById('version-delete-date');
+    const confirmBtn = document.getElementById('version-delete-confirm');
+    let pendingId = null;
+
+    function openModal(versionId, createdAt) {
+        pendingId = versionId;
+        const d = parseTs(createdAt);
+        modalDate.textContent = d ? fmt.format(d) : createdAt;
+        modal.classList.remove('hidden');
+    }
+
+    function closeModal() {
+        modal.classList.add('hidden');
+        pendingId = null;
+    }
+
+    function refreshEmptyState() {
+        const list = document.getElementById('version-list');
+        const empty = document.getElementById('version-empty');
+        if (list.querySelectorAll('.version-li').length === 0) {
+            list.classList.add('hidden');
+            empty.classList.remove('hidden');
+        }
+    }
+
+    document.querySelectorAll('.version-delete').forEach(btn => {
+        btn.addEventListener('click', () => openModal(btn.dataset.versionId, btn.dataset.createdAt));
+    });
+
+    modal.querySelectorAll('[data-close]').forEach(el => el.addEventListener('click', closeModal));
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape' && !modal.classList.contains('hidden')) closeModal();
+    });
+
+    confirmBtn.addEventListener('click', async () => {
+        if (!pendingId) return;
+        const url = `${window.location.pathname.replace(/\/edit$/, '')}/versions/${pendingId}/delete`;
+        confirmBtn.disabled = true;
+        try {
+            const res = await fetch(url, { method: 'POST' });
+            if (res.ok) {
+                const li = document.querySelector(`.version-delete[data-version-id="${pendingId}"]`)?.closest('.version-li');
+                if (li) li.remove();
+                refreshEmptyState();
+            }
+        } finally {
+            confirmBtn.disabled = false;
+            closeModal();
+        }
     });
 });
 </script>
