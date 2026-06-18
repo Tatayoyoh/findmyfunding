@@ -1,0 +1,4 @@
+@import "tailwindcss";
+
+/* Scan Jinja2 templates for utility classes (incl. classes in <script> blocks). */
+@source "../../templates/**/*.html";

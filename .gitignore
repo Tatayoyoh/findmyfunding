@@ -26,5 +26,8 @@ data/*.db*
 .DS_Store
 Thumbs.db
 
+# Tailwind standalone CLI binary (build tool, downloaded locally)
+tools/tailwindcss
+
 docker-compose.yaml
 docker-compose.yml

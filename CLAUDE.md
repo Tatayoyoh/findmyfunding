@@ -5,7 +5,7 @@ Application web pour aider les structures (associations, ONG, coopératives, etc
 ## Stack technique
 
 - **Backend** : Python 3.12+ / FastAPI / SQLite (FTS5) / Jinja2
-- **Frontend** : HTMX + Tailwind CSS (CDN) + Lucide icons (CDN)
+- **Frontend** : HTMX + Tailwind CSS + Lucide icons, tous **servis en local** (`src/static/`, montés sur `/static`), aucun CDN. HTMX/Lucide vendorés tels quels (`src/static/vendor/`). Tailwind v4 compilé en CSS statique (`src/static/css/app.css`) via la CLI standalone — pas de Play CDN runtime, pas de node_modules.
 - **Scraping + extraction** : pipeline léger **in-process** (aucun service externe). Fetch HTTP avec impersonation TLS navigateur via `curl_cffi` (fallback `httpx`) → HTML nettoyé par `trafilatura`, PDF converti en markdown par `pymupdf4llm`. Extraction structurée via DeepSeek wrappé par `instructor` (validation Pydantic + retry). Footprint ~dizaines de Mo, pas de navigateur headless → tient sur un VPS 1 Go. (Remplace l'ancien stack Firecrawl self-hébergé, trop gourmand en CPU/RAM.)
 - **LLM** : DeepSeek (`deepseek-chat`) via API OpenAI-compatible. Utilisé par `scraper.py` (extraction structurée via `instructor`) et par `excel_import.py` (parse dates de soumission)
 - **Scheduler** : APScheduler (scraping mensuel le 1er du mois à 3h)
@@ -28,6 +28,12 @@ uv run python scripts/run_scrape.py
 
 # Lancer les tests
 uv run pytest tests/
+
+# Compiler le CSS Tailwind (après modif des classes dans les templates)
+# Binaire CLI standalone (gitignoré) : télécharger une fois depuis
+# https://github.com/tailwindlabs/tailwindcss/releases/latest/download/tailwindcss-linux-x64 -> tools/tailwindcss
+./tools/tailwindcss -i src/static/css/input.css -o src/static/css/app.css --minify
+# Ajouter --watch pendant le dev pour recompiler à la volée
 ```
 
 ## Structure du projet

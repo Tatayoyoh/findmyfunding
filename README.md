@@ -30,6 +30,16 @@ uv run python scripts/import_excel.py
 uv run python scripts/run_scrape.py
 ```
 
+## CSS compilation
+
+```bash
+curl -sSL https://github.com/tailwindlabs/tailwindcss/releases/latest/download/tailwindcss-linux-x64 -o tools/tailwindcss
+chmod +x tools/tailwindcss
+# https://github.com/tailwindlabs/tailwindcss/releases/latest/download/tailwindcss-linux-x64 -> tools/tailwindcss
+./tools/tailwindcss -i src/static/css/input.css -o src/static/css/app.css --minify
+# Ajouter --watch pendant le dev pour recompiler à la volée
+```
+
 ## Production
 
 ```bash
