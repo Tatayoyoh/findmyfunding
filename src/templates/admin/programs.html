@@ -24,7 +24,7 @@
         <p class="text-sm text-gray-500 mb-4">
             URL d'une page de financement. L'IA extrait automatiquement les informations.
         </p>
-        <form method="POST" action="/admin/add-source" class="space-y-3">
+        <form id="add-source-form" method="POST" action="/admin/add-source" class="space-y-3">
             <input type="url" name="url" required placeholder="https://..."
                 class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500" />
             <input type="text" name="label" placeholder="Nom (optionnel)"
@@ -52,6 +52,20 @@
 
     {% include "admin/partials/scrape_status.html" %}
 </div>
+
+{# Full-screen loading overlay shown while a new source is being analysed #}
+<div id="add-source-overlay" class="hidden fixed inset-0 z-50 bg-white/85 backdrop-blur-sm flex flex-col items-center justify-center gap-3">
+    <i data-lucide="loader-2" class="w-10 h-10 text-indigo-600 animate-spin"></i>
+    <p class="text-base text-gray-700 font-medium">Analyse de la source en cours…</p>
+    <p class="text-sm text-gray-500">Extraction automatique des informations, cela peut prendre quelques secondes.</p>
+</div>
+<script>
+    document.getElementById('add-source-form')?.addEventListener('submit', () => {
+        const overlay = document.getElementById('add-source-overlay');
+        overlay.classList.remove('hidden');
+        if (window.lucide) lucide.createIcons();
+    });
+</script>
 
 {# Auto-poll on page load if a scrape is already running (e.g. after browser refresh) #}
 {% if scrape_state and scrape_state.running %}
