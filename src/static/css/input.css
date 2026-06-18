@@ -2,3 +2,15 @@
 
 /* Scan Jinja2 templates for utility classes (incl. classes in <script> blocks). */
 @source "../../templates/**/*.html";
+
+/* Tailwind v4 compat : restaure les défauts v3 (l'app a été conçue sous Play CDN v3).
+   v4 a changé la couleur de bordure par défaut (gray-200 -> currentColor). */
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentColor);
+  }
+}
