@@ -78,7 +78,7 @@ async def add_source(
     db = await get_db()
     try:
         if extraction:
-            await db.execute(
+            cursor = await db.execute(
                 """INSERT INTO funding_programs
                    (category, name, project_types, summary, source_urls,
                     min_amount_eur, max_amount_eur, cofinancing_pct,
@@ -110,22 +110,21 @@ async def add_source(
                     str(extraction.end_submission_date) if extraction.end_submission_date else None,
                 ),
             )
-            preview = (extraction.summary or extraction.name or "")[:100]
-            message = f"Programme créé et analysé : {preview}"
         else:
-            await db.execute(
+            cursor = await db.execute(
                 """INSERT INTO funding_programs
                    (category, name, source_urls)
                    VALUES (?, ?, ?)""",
                 ("Non classifié", label or url[:80], source_urls_json),
             )
-            message = "Programme créé mais extraction automatique indisponible."
         await db.commit()
+        new_id = cursor.lastrowid
     finally:
         await db.close()
 
+    await snapshot_program(new_id, "edit")
     return RedirectResponse(
-        f"/admin/programs?message={quote(message)}", status_code=303,
+        f"/admin/programs/{new_id}/edit", status_code=303,
     )
 
 
