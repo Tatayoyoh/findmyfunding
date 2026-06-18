@@ -8,11 +8,8 @@ class Settings(BaseSettings):
     scrape_interval_days: int = 30
     excel_path: str = "data/Cartographie des financements.xlsx"
 
-    # Firecrawl self-host
-    firecrawl_api_url: str = "http://localhost:3002"
-    firecrawl_api_key: str = ""  # optional for self-host
-
-    # DeepSeek (used by excel_import for date extraction; same key used by Firecrawl)
+    # DeepSeek — LLM extraction (scraper) + Excel date parsing (excel_import).
+    # OpenAI-compatible API.
     deepseek_api_key: str = ""
     deepseek_base_url: str = "https://api.deepseek.com/v1"
     deepseek_model: str = "deepseek-chat"

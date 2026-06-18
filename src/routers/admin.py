@@ -59,7 +59,7 @@ async def add_source(
     label: str = Form(""),
 ):
     """Add a new source URL → create a funding program with that URL.
-    Runs Firecrawl extraction to prefill structured fields when possible."""
+    Runs LLM extraction to prefill structured fields when possible."""
     extraction = None
     try:
         extraction = await scrape_program(program_id=0, urls=[url])
@@ -114,7 +114,7 @@ async def add_source(
                    VALUES (?, ?, ?)""",
                 ("Non classifié", label or url[:80], source_urls_json),
             )
-            message = "Programme créé mais extraction Firecrawl indisponible."
+            message = "Programme créé mais extraction automatique indisponible."
         await db.commit()
     finally:
         await db.close()
@@ -190,7 +190,7 @@ async def prompt_save(request: Request, prompt: str = Form("")):
 
 @router.post("/programs/{program_id}/scrape")
 async def scrape_single_program(request: Request, program_id: int):
-    """Trigger a Firecrawl scrape for ONE program. Synchronous: blocks until done.
+    """Trigger a scrape for ONE program. Synchronous: blocks until done.
     On success: HX-Refresh so the caller page reloads with fresh data.
     On error: returns an OOB toast template."""
     prog = await get_by_id(program_id)

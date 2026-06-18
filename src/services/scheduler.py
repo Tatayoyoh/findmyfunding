@@ -13,7 +13,7 @@ scheduler = AsyncIOScheduler()
 
 
 async def monthly_scrape_job():
-    """Scrape every program via Firecrawl (which also handles LLM extraction)."""
+    """Scrape every program (fetch sources + LLM structured extraction)."""
     logger.info("Starting monthly scrape job")
     results = await scrape_all()
     ok = sum(1 for r in results if r["status"] == "ok")

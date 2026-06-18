@@ -1,17 +1,26 @@
-"""Scraping + structured extraction via self-hosted Firecrawl.
+"""Scraping + structured extraction — lightweight in-process pipeline.
 
-Each program is scraped by passing all its source URLs to Firecrawl's /extract
-endpoint with a Pydantic schema. The LLM (DeepSeek via OpenAI-compatible API,
-configured in the Firecrawl container) returns structured FundingExtraction
-data which we persist back to funding_programs.
+No external service (replaces the self-hosted Firecrawl stack). Per program:
+  1. Fetch each source URL (Scrapling stealthy HTTP, httpx fallback).
+  2. HTML -> clean text via trafilatura ; PDF -> markdown via pymupdf4llm.
+  3. Concatenate sources and extract structured FundingExtraction via DeepSeek
+     (OpenAI-compatible API) wrapped by Instructor (schema validation + retry).
+
+Footprint: ~tens of MB, no browser, no Redis/RabbitMQ/Postgres. Suits a 1 GB VPS.
 """
 
+import asyncio
 import json
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
-from firecrawl import AsyncFirecrawl
+import httpx
+import instructor
+import pymupdf
+import pymupdf4llm
+import trafilatura
+from openai import AsyncOpenAI
 
 from src.config import settings
 from src.database import get_db
@@ -19,6 +28,14 @@ from src.models import FundingExtraction
 from src.services.funding_repo import get_all
 
 logger = logging.getLogger(__name__)
+
+# Per-source character cap, so a single huge page can't blow the LLM context.
+MAX_CHARS_PER_SOURCE = 15000
+FETCH_TIMEOUT = 30.0
+USER_AGENT = (
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+)
 
 
 # In-memory state of the current scrape run. Reset at each scrape_all() call.
@@ -134,11 +151,88 @@ def set_extraction_prompt(text: str) -> None:
     path.write_text(cleaned, encoding="utf-8")
 
 
-def _client() -> AsyncFirecrawl:
-    return AsyncFirecrawl(
-        api_url=settings.firecrawl_api_url,
-        api_key=settings.firecrawl_api_key or "noauth",
+def _looks_like_pdf(url: str, content_type: str | None) -> bool:
+    return url.lower().split("?")[0].endswith(".pdf") or (
+        content_type is not None and "application/pdf" in content_type.lower()
     )
+
+
+def _html_to_text(html: str) -> str:
+    """Main-content extraction (boilerplate stripped) via trafilatura."""
+    text = trafilatura.extract(
+        html,
+        include_links=True,
+        include_tables=True,
+        favor_recall=True,
+    )
+    return text or ""
+
+
+def _pdf_bytes_to_markdown(data: bytes) -> str:
+    doc = pymupdf.open(stream=data, filetype="pdf")
+    try:
+        return pymupdf4llm.to_markdown(doc, show_progress=False)
+    finally:
+        doc.close()
+
+
+def _http_get(url: str):
+    """GET a URL impersonating a real browser (curl_cffi TLS fingerprint) for
+    anti-bot resilience, falling back to httpx on ANY curl_cffi failure (missing
+    lib, blocked fingerprint, reset, timeout...). Returns (content_bytes, text,
+    content_type) or raises if both transports fail."""
+    try:
+        from curl_cffi import requests as creq
+
+        resp = creq.get(
+            url, impersonate="chrome", timeout=FETCH_TIMEOUT, allow_redirects=True
+        )
+        resp.raise_for_status()
+        return resp.content, resp.text, resp.headers.get("content-type")
+    except Exception as exc:
+        logger.debug(f"curl_cffi fetch failed for {url}, falling back to httpx: {exc}")
+
+    resp = httpx.get(
+        url, timeout=FETCH_TIMEOUT, follow_redirects=True,
+        headers={"User-Agent": USER_AGENT},
+    )
+    resp.raise_for_status()
+    return resp.content, resp.text, resp.headers.get("content-type")
+
+
+def _fetch_one_blocking(url: str) -> str:
+    """Fetch a single URL and return cleaned text/markdown. Runs in a thread."""
+    try:
+        content, text, content_type = _http_get(url)
+    except Exception as exc:
+        logger.warning(f"Fetch failed for {url}: {exc}")
+        return ""
+
+    # PDF (by extension or content-type, including PDFs behind non-.pdf URLs).
+    if _looks_like_pdf(url, content_type):
+        try:
+            return _pdf_bytes_to_markdown(content)[:MAX_CHARS_PER_SOURCE]
+        except Exception as exc:
+            logger.warning(f"PDF parse failed for {url}: {exc}")
+            return ""
+
+    return _html_to_text(text)[:MAX_CHARS_PER_SOURCE]
+
+
+async def _fetch_sources(urls: list[str]) -> str:
+    """Fetch all URLs concurrently (threads) and concatenate labelled blocks."""
+    texts = await asyncio.gather(*(asyncio.to_thread(_fetch_one_blocking, u) for u in urls))
+    blocks = [f"### Source: {url}\n\n{text}" for url, text in zip(urls, texts) if text.strip()]
+    return "\n\n---\n\n".join(blocks)
+
+
+def _extractor():
+    """Instructor-wrapped DeepSeek client (JSON mode for OpenAI-compatible API)."""
+    client = AsyncOpenAI(
+        api_key=settings.deepseek_api_key,
+        base_url=settings.deepseek_base_url,
+    )
+    return instructor.from_openai(client, mode=instructor.Mode.JSON)
 
 
 async def _persist_extraction(
@@ -244,29 +338,38 @@ async def scrape_one(prog) -> tuple[bool, str | None]:
         await _persist_extraction(prog.id, extraction, now, touched_urls)
         return True, None
     except Exception as exc:
-        logger.warning(f"Firecrawl extract failed for program {prog.id}: {exc}")
+        logger.warning(f"Extraction failed for program {prog.id}: {exc}")
         await _mark_failed(prog.id, now, touched_urls, str(exc))
         return False, str(exc)
 
 
 async def scrape_program(program_id: int, urls: list[str]) -> FundingExtraction | None:
-    """Extract structured data for one program via Firecrawl."""
+    """Fetch a program's URLs, then extract structured data via DeepSeek."""
     if not urls:
         return None
-    fc = _client()
-    response = await fc.extract(
-        urls=urls,
-        schema=FundingExtraction.model_json_schema(),
-        prompt=get_extraction_prompt(),
-    )
-    data = getattr(response, "data", None) or getattr(response, "json", None) or {}
-    if not data:
+
+    content = await _fetch_sources(urls)
+    if not content.strip():
+        logger.warning(f"No content fetched for program {program_id} ({urls})")
         return None
-    return FundingExtraction(**data)
+
+    user_message = (
+        f"{get_extraction_prompt()}\n\n"
+        "Voici le contenu des pages sources à analyser :\n\n"
+        f"{content}"
+    )
+    client = _extractor()
+    extraction = await client.chat.completions.create(
+        model=settings.deepseek_model,
+        response_model=FundingExtraction,
+        messages=[{"role": "user", "content": user_message}],
+        max_retries=2,
+    )
+    return extraction
 
 
 async def scrape_all() -> list[dict]:
-    """Iterate every program, scrape its URLs via Firecrawl, persist extraction."""
+    """Iterate every program, fetch its URLs, extract via DeepSeek, persist."""
     programs = await get_all()
     scrapeable = [p for p in programs if p.source_urls and any(s.url.startswith("http") for s in p.source_urls)]
 

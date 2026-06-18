@@ -6,8 +6,8 @@ Application web pour aider les structures (associations, ONG, coopératives, etc
 
 - **Backend** : Python 3.12+ / FastAPI / SQLite (FTS5) / Jinja2
 - **Frontend** : HTMX + Tailwind CSS (CDN) + Lucide icons (CDN)
-- **Scraping + extraction** : Firecrawl self-hébergé (intégré au `docker-compose.prod.yml` comme services `firecrawl-*`, port 3002) → endpoint `/extract` avec schéma Pydantic. Voir `firecrawl/README.md` pour le setup.
-- **LLM** : DeepSeek (`deepseek-chat`) via API OpenAI-compatible. Utilisé par Firecrawl (extraction structurée) et par `excel_import.py` (parse dates de soumission)
+- **Scraping + extraction** : pipeline léger **in-process** (aucun service externe). Fetch HTTP avec impersonation TLS navigateur via `curl_cffi` (fallback `httpx`) → HTML nettoyé par `trafilatura`, PDF converti en markdown par `pymupdf4llm`. Extraction structurée via DeepSeek wrappé par `instructor` (validation Pydantic + retry). Footprint ~dizaines de Mo, pas de navigateur headless → tient sur un VPS 1 Go. (Remplace l'ancien stack Firecrawl self-hébergé, trop gourmand en CPU/RAM.)
+- **LLM** : DeepSeek (`deepseek-chat`) via API OpenAI-compatible. Utilisé par `scraper.py` (extraction structurée via `instructor`) et par `excel_import.py` (parse dates de soumission)
 - **Scheduler** : APScheduler (scraping mensuel le 1er du mois à 3h)
 - **Package manager** : `uv`
 
@@ -47,7 +47,7 @@ src/
 │   ├── excel_import.py  # Parse Excel (cellules fusionnées, hyperlinks)
 │   ├── funding_repo.py  # CRUD funding_programs
 │   ├── search_service.py # Recherche FTS5 + filtres
-│   ├── scraper.py       # Firecrawl extract → FundingExtraction (Pydantic schema)
+│   ├── scraper.py       # Fetch (curl_cffi/httpx) + trafilatura/pymupdf4llm → DeepSeek/instructor → FundingExtraction
 │   └── scheduler.py     # APScheduler mensuel → scrape_all()
 └── templates/           # Jinja2 + HTMX
 ```
@@ -73,9 +73,9 @@ Une seule table métier : `funding_programs`. Les URLs sources sont stockées **
 
 Champs `last_checked_at` populés par le scraper à chaque run (Firecrawl ne donne pas de hash natif). La table `monitored_sources` n'existe plus (fusionnée dans `source_urls`). Migration auto au startup via `database.py:_migrate_monitored_sources`.
 
-Colonnes JSON additionnelles sur `funding_programs` (extraction Firecrawl) : `summary`, `eligibility_criteria`, `fundable_axes`, `relevant_links`, `pdf_documents`, `tags`. Migration `_migrate_firecrawl_columns` ajoute les colonnes manquantes au startup.
+Colonnes JSON additionnelles sur `funding_programs` (extraction LLM) : `summary`, `eligibility_criteria`, `fundable_axes`, `relevant_links`, `pdf_documents`, `tags`. Migration `_migrate_firecrawl_columns` ajoute les colonnes manquantes au startup (nom historique conservé).
 
-`scraper.scrape_all()` itère les programmes, passe toutes leurs URLs à `Firecrawl.extract()` avec le schéma `FundingExtraction` (Pydantic), puis persiste les champs structurés en DB. Pas de change-detection par hash dans cette version — re-extraction complète à chaque scrape (coût DeepSeek négligeable, ~30c pour 60 progs).
+`scraper.scrape_all()` itère les programmes ; pour chacun, `scrape_program()` fetch toutes les URLs (`curl_cffi`/`httpx`, en threads via `asyncio.to_thread`), nettoie HTML (`trafilatura`) / PDF (`pymupdf4llm`), concatène (cap `MAX_CHARS_PER_SOURCE`/source) et appelle DeepSeek via `instructor` avec le schéma `FundingExtraction` (Pydantic), puis persiste les champs structurés en DB. Pas de change-detection par hash — re-extraction complète à chaque scrape (coût DeepSeek négligeable, ~30c pour 60 progs).
 
 ## Pages admin
 
