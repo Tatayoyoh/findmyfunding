@@ -12,9 +12,20 @@ class Settings(BaseSettings):
     # OpenAI-compatible API.
     deepseek_api_key: str = ""
     deepseek_base_url: str = "https://api.deepseek.com/v1"
-    deepseek_model: str = "deepseek-chat"
+    deepseek_model: str = "deepseek-v4-pro"
+
+    # Thinking mode (https://api-docs.deepseek.com/guides/thinking_mode)
+    deepseek_thinking: bool = True
+    deepseek_reasoning_effort: str = "high"  # "high" | "max"
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
+
+    @property
+    def deepseek_thinking_extra_body(self) -> dict:
+        """extra_body payload enabling DeepSeek thinking mode (empty if disabled)."""
+        if not self.deepseek_thinking:
+            return {}
+        return {"thinking": {"type": "enabled"}}
 
     @property
     def db_path(self) -> Path:

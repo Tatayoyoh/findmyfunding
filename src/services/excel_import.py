@@ -233,6 +233,8 @@ Textes :
             messages=[{"role": "user", "content": batch_prompt}],
             max_tokens=2048,
             response_format={"type": "json_object"},
+            reasoning_effort=settings.deepseek_reasoning_effort,
+            extra_body=settings.deepseek_thinking_extra_body,
         )
         response_text = completion.choices[0].message.content.strip()
         if response_text.startswith("```"):
