@@ -111,17 +111,39 @@ def _mark_done(running: bool = False):
 DEFAULT_EXTRACTION_PROMPT = """Tu analyses des pages web décrivant des programmes de financement
 pour des structures (associations, ONG, coopératives, entreprises sociales).
 
-Extrais les informations selon le schéma demandé. Sois rigoureux :
-- Pour les critères d'éligibilité, liste les conditions formelles d'accès
-  (statut, ancienneté, territoire, secteur, taille de structure).
-- Pour les axes finançables, liste les actions ou postes de dépenses
-  effectivement couverts par le financement.
-- Pour les tags, choisis 3 à 8 mots-clés courts qui caractérisent
-  le programme (domaine, public cible, type d'action).
-- Pour les montants, convertis tout en euros entiers.
-- Pour les PDFs, ne liste que les URLs se terminant par .pdf ou pointant
-  vers des documents téléchargeables (règlement, dossier de candidature).
-- Si une information n'est pas trouvée, laisse null/liste vide. Ne devine pas.
+Ton objectif : remplir TOUS les champs du schéma demandé à partir des informations
+présentes dans les pages. Exploite la moindre information utile ; ne laisse un champ
+vide que si l'information est réellement absente. Renseigne chaque champ :
+
+- name : le titre officiel du programme (pas le nom de l'organisme financeur seul).
+- summary : 2-3 phrases claires décrivant l'objet du financement, pour qui et pourquoi.
+- project_types : domaine d'application et types de projets éligibles, formulés de façon
+  synthétique (un paragraphe court).
+- eligibility_criteria : conditions formelles d'accès, un critère par item (statut juridique,
+  ancienneté, territoire, secteur, taille de structure, situation, etc.).
+- eligible_structures : types de structures pouvant candidater (association, ONG, coopérative,
+  SCOP, entreprise sociale, collectivité…). Déduis-les des critères si non listés explicitement.
+- eligible_themes : thèmes/domaines couverts (environnement, social, énergie, jeunesse…).
+- min_amount_eur / max_amount_eur : montants en euros entiers (convertis k€/M€, retire les
+  séparateurs). Si un seul montant ou un forfait est donné, renseigne le champ pertinent.
+- cofinancing_pct : taux de co-financement ou de prise en charge exigé, en pourcentage entier.
+- application_type : "appel_a_projets" si campagne avec dates, "fil_de_leau" si dépôt continu
+  avec instruction au fil de l'eau, "permanent" si dispositif sans échéance. Déduis-le du texte.
+- permanent : true s'il n'y a aucune date limite (dépôt permanent / fil de l'eau).
+- start_submission_date / end_submission_date : période d'ouverture des candidatures (YYYY-MM-DD).
+- next_deadline : prochaine date limite connue (YYYY-MM-DD), même si une seule date est donnée.
+- fundable_axes : actions ou postes de dépenses effectivement couverts par le financement.
+- relevant_links : URLs utiles citées (FAQ, formulaire en ligne, page contact, guide).
+- pdf_documents : uniquement les URLs se terminant par .pdf ou pointant vers des documents
+  téléchargeables (règlement, dossier de candidature, annexes).
+- tags : 3 à 8 mots-clés courts caractérisant le programme (domaine, public cible, type d'action).
+
+Règles :
+- Tu PEUX raisonner et déduire un champ à partir d'indices cohérents du texte
+  (ex : déduire eligible_structures des critères, application_type de la présence de dates).
+- En revanche n'INVENTE jamais un fait absent : pas de montant, date ou URL imaginaire.
+  En cas de doute réel sur une donnée factuelle, laisse null / liste vide.
+- Normalise les dates au format YYYY-MM-DD et les montants en euros entiers.
 """
 
 
@@ -366,6 +388,8 @@ async def scrape_program(program_id: int, urls: list[str]) -> FundingExtraction 
         response_model=FundingExtraction,
         messages=[{"role": "user", "content": user_message}],
         max_retries=2,
+        reasoning_effort=settings.deepseek_reasoning_effort,
+        extra_body=settings.deepseek_thinking_extra_body,
     )
     return extraction
 
