@@ -4,7 +4,8 @@ Application web pour aider les structures (associations, ONG, coopératives, etc
 
 ## Stack technique
 
-- **Backend** : Python 3.12+ / FastAPI / SQLite (FTS5) / Jinja2
+- **Backend** : Python 3.12+ / FastAPI / libSQL (SQLite + FTS5) / Jinja2
+- **Base de données** : libSQL via le paquet `libsql`. En prod, DB **distante Turso** (durable, partagée entre replicas) ; en dev, fichier local. Choix piloté par `TURSO_DATABASE_URL` (vide → fichier local `DATABASE_PATH`). `database.py` expose un mince **adaptateur async** (`AsyncConnection`/`AsyncCursor`/`Row`) au-dessus du driver `libsql` synchrone : chaque connexion tourne sur son propre thread (executor 1 worker) et les lignes (tuples bruts) sont ré-emballées en `Row` dict-like via `cursor.description`. Les call-sites gardent l'idiome `await db.execute(...)` inchangé. **Pourquoi Turso** : FastAPI Cloud a un FS éphémère + multi-replicas → un fichier SQLite local n'est ni partagé ni persistant (les données « disparaissent » après ~1-2 jours). Mode **remote-only** (pas de replica embarquée) pour garantir la cohérence read-after-write sur les éditions admin.
 - **Frontend** : HTMX + Tailwind CSS + Lucide icons, tous **servis en local** (`src/static/`, montés sur `/static`), aucun CDN. HTMX/Lucide vendorés tels quels (`src/static/vendor/`). Tailwind v4 compilé en CSS statique (`src/static/css/app.css`) via la CLI standalone — pas de Play CDN runtime, pas de node_modules.
 - **Scraping + extraction** : pipeline léger **in-process** (aucun service externe). Fetch HTTP avec impersonation TLS navigateur via `curl_cffi` (fallback `httpx`) → HTML nettoyé par `trafilatura`, PDF converti en markdown par `pymupdf4llm`. Extraction structurée via DeepSeek wrappé par `instructor` (validation Pydantic + retry). Footprint ~dizaines de Mo, pas de navigateur headless → tient sur un VPS 1 Go. (Remplace l'ancien stack Firecrawl self-hébergé, trop gourmand en CPU/RAM.)
 - **LLM** : DeepSeek (`deepseek-chat`) via API OpenAI-compatible. Utilisé par `scraper.py` (extraction structurée via `instructor`) et par `excel_import.py` (parse dates de soumission)
@@ -19,6 +20,10 @@ uv sync
 
 # Importer le fichier Excel dans la base
 uv run python scripts/import_excel.py
+
+# Migrer le fichier SQLite local vers la base Turso distante (one-off)
+# (copie funding_programs + program_versions ; --force pour écraser)
+uv run python scripts/migrate_to_turso.py
 
 # Lancer le serveur de développement
 uv run fastapi dev main:app --reload --app-dir src

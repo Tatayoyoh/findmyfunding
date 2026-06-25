@@ -1,6 +1,109 @@
-import aiosqlite
+"""Database access layer.
+
+Backed by libSQL (`libsql` package) so the same code talks to a local SQLite
+file in dev and to a remote Turso primary in production. `libsql` is a
+synchronous, sqlite3-compatible driver; the thin async adapter below keeps the
+existing `await db.execute(...)` call sites working by running every blocking
+call on a dedicated single-thread executor (one thread per connection — keeps
+the event loop free and satisfies libsql's same-thread requirement).
+
+Unlike sqlite3, libsql rows are plain tuples with no name access, so the
+adapter rebuilds dict-like `Row` objects from `cursor.description`.
+"""
+
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
+
+import libsql
 
 from src.config import settings
+
+
+class Row:
+    """Dict-and-index addressable row, mimicking the slice of `sqlite3.Row` /
+    `aiosqlite.Row` the codebase relies on (``row["col"]``, ``row[i]``,
+    ``row.keys()``, ``dict(row)``, iteration)."""
+
+    __slots__ = ("_cols", "_idx", "_vals")
+
+    def __init__(self, cols: list[str], vals: tuple):
+        self._cols = cols
+        self._idx = {c: i for i, c in enumerate(cols)}
+        self._vals = vals
+
+    def __getitem__(self, key):
+        if isinstance(key, str):
+            return self._vals[self._idx[key]]
+        return self._vals[key]
+
+    def keys(self) -> list[str]:
+        return list(self._cols)
+
+    def __iter__(self):
+        return iter(self._vals)
+
+    def __len__(self) -> int:
+        return len(self._vals)
+
+    def __repr__(self) -> str:
+        return f"Row({dict(zip(self._cols, self._vals))!r})"
+
+
+class AsyncCursor:
+    """Async wrapper over a libsql cursor. ``lastrowid`` / ``rowcount`` are
+    captured at execute time (synchronous attributes, no I/O)."""
+
+    def __init__(self, cursor, run, cols, lastrowid, rowcount):
+        self._cursor = cursor
+        self._run = run
+        self._cols = cols
+        self.lastrowid = lastrowid
+        self.rowcount = rowcount
+
+    async def fetchone(self) -> Row | None:
+        row = await self._run(self._cursor.fetchone)
+        return Row(self._cols, row) if row is not None else None
+
+    async def fetchall(self) -> list[Row]:
+        rows = await self._run(self._cursor.fetchall)
+        return [Row(self._cols, r) for r in rows]
+
+
+class AsyncConnection:
+    """Async facade over a synchronous libsql connection. Every DB touch runs on
+    a dedicated single-thread executor so the connection is only ever used from
+    the thread that created it."""
+
+    # Rows are always `Row`; exposed for drop-in compatibility with code that
+    # used to set `db.row_factory = aiosqlite.Row`.
+    row_factory = Row
+
+    def __init__(self, conn, executor: ThreadPoolExecutor):
+        self._conn = conn
+        self._executor = executor
+
+    async def _run(self, fn, *args):
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(self._executor, lambda: fn(*args))
+
+    async def execute(self, sql: str, params=()) -> AsyncCursor:
+        def _do():
+            cur = self._conn.execute(sql, params)
+            cols = [d[0] for d in cur.description] if cur.description else []
+            return cur, cols, cur.lastrowid, cur.rowcount
+
+        cur, cols, lastrowid, rowcount = await self._run(_do)
+        return AsyncCursor(cur, self._run, cols, lastrowid, rowcount)
+
+    async def executescript(self, script: str) -> None:
+        await self._run(self._conn.executescript, script)
+
+    async def commit(self) -> None:
+        await self._run(self._conn.commit)
+
+    async def close(self) -> None:
+        await self._run(self._conn.close)
+        self._executor.shutdown(wait=False)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS funding_programs (
@@ -89,16 +192,29 @@ END;
 """
 
 
-async def get_db() -> aiosqlite.Connection:
-    db = await aiosqlite.connect(str(settings.db_path))
-    db.row_factory = aiosqlite.Row
-    await db.execute("PRAGMA journal_mode=WAL")
-    await db.execute("PRAGMA foreign_keys=ON")
-    return db
+async def get_db() -> AsyncConnection:
+    executor = ThreadPoolExecutor(max_workers=1)
+    loop = asyncio.get_running_loop()
+
+    def _connect():
+        if settings.use_remote_db:
+            conn = libsql.connect(
+                settings.turso_database_url,
+                auth_token=settings.turso_auth_token,
+            )
+        else:
+            conn = libsql.connect(str(settings.db_path))
+            conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA foreign_keys=ON")
+        return conn
+
+    conn = await loop.run_in_executor(executor, _connect)
+    return AsyncConnection(conn, executor)
 
 
 async def init_db():
-    settings.db_path.parent.mkdir(parents=True, exist_ok=True)
+    if not settings.use_remote_db:
+        settings.db_path.parent.mkdir(parents=True, exist_ok=True)
     db = await get_db()
     try:
         await db.executescript(SCHEMA)
@@ -128,7 +244,7 @@ async def init_db():
         await db.close()
 
 
-async def _backfill_program_versions(db: aiosqlite.Connection):
+async def _backfill_program_versions(db: AsyncConnection):
     """Snapshot any program that has no version yet, using its own
     last_updated_at as the baseline timestamp."""
     cursor = await db.execute(
@@ -146,7 +262,7 @@ async def _backfill_program_versions(db: aiosqlite.Connection):
         await snapshot_program(row["id"], "edit", created_at=ts)
 
 
-async def _migrate_firecrawl_columns(db: aiosqlite.Connection):
+async def _migrate_firecrawl_columns(db: AsyncConnection):
     """Add new columns introduced by the Firecrawl extraction refactor."""
     cursor = await db.execute("PRAGMA table_info(funding_programs)")
     cols = {row[1] for row in await cursor.fetchall()}
@@ -167,7 +283,7 @@ async def _migrate_firecrawl_columns(db: aiosqlite.Connection):
     await db.commit()
 
 
-async def _migrate_monitored_sources(db: aiosqlite.Connection):
+async def _migrate_monitored_sources(db: AsyncConnection):
     """Fold monitored_sources rows into funding_programs.source_urls JSON entries,
     then drop the monitored_sources table. Orphan sources (no program) are dropped."""
     import json
@@ -221,7 +337,7 @@ async def _migrate_monitored_sources(db: aiosqlite.Connection):
     await db.commit()
 
 
-async def _migrate_submission_dates(db: aiosqlite.Connection):
+async def _migrate_submission_dates(db: AsyncConnection):
     """Migrate submission_dates text to structured date fields."""
     import re
 
